@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video Wizard Slideshow Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-labelledby="app-title">
+        <header class="masthead">
+          <div class="brand">
+            <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
+            <h1 id="app-title">Slideshow Generator</h1>
+          </div>
+        </header>
+
+        <div class="grid">
+          <section class="panel source-panel" aria-labelledby="photos-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="photos-title">Photos</h2>
+              </div>
+            </div>
+
+            <label class="dropzone" for="photoInput">
+              <input id="photoInput" type="file" accept="image/*" multiple />
+              <span class="drop-icon">+</span>
+              <span class="drop-title">Add Photos</span>
+              <span class="drop-copy">Drag photos to change order.</span>
+            </label>
+
+            <div id="photoStrip" class="photo-strip" aria-live="polite"></div>
+            <div id="trashDrop" class="trash-drop" aria-label="Drop photos here to delete">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 11v6M14 11v6M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13" />
+              </svg>
+            </div>
+          </section>
+
+          <aside class="right-rail">
+            <button id="generateButton" class="generate" type="button">Generate</button>
+            <p id="outputLocation" class="output-location">Choose filename and save location when generating.</p>
+
+            <div class="rail-audio">
+              <label class="file-row">
+                <span>Music</span>
+                <input id="audioInput" type="file" />
+              </label>
+            </div>
+
+          <details id="settingsMenu" class="settings-menu">
+            <summary>
+              <span>Settings</span>
+              <small>Timing, transitions, format</small>
+            </summary>
+
+            <div class="settings-drawer">
+              <section class="settings-section" aria-labelledby="settings-title">
+                <div class="panel-heading">
+                  <div>
+                    <h2 id="settings-title">Timing</h2>
+                  </div>
+                </div>
+
+                <div id="loopControls" class="loop-controls">
+                  <div class="control">
+                    <div class="control-label">
+                      <label for="loopCountRange">Loop Slideshow</label>
+                      <output id="loopCountValue" for="loopCountRange">0 loops</output>
+                    </div>
+                    <input id="loopCountRange" type="range" min="0" max="99" value="0" step="1" />
+                  </div>
+                  <p id="loopDurationLabel" class="loop-duration">Total duration: 0:00</p>
+                </div>
+
+                <div class="control">
+                  <div class="control-label">
+                    <label for="durationRange">Seconds per image</label>
+                    <output id="durationValue" for="durationRange">5.0s</output>
+                  </div>
+                  <input id="durationRange" type="range" min="1" max="15" value="5" step="0.5" />
+                </div>
+
+                <div class="control">
+                  <div class="control-label">
+                    <label for="transitionDuration">Transition length</label>
+                    <output id="transitionDurationValue" for="transitionDuration">1.0s</output>
+                  </div>
+                  <input id="transitionDuration" type="range" min="0.2" max="3" value="1" step="0.1" />
+                </div>
+
+                <fieldset class="transition-group">
+                  <legend>Orientation</legend>
+                  <label><input type="radio" name="orientation" value="horizontal" checked /> Horizontal</label>
+                  <label><input type="radio" name="orientation" value="vertical" /> Vertical</label>
+                </fieldset>
+
+                <div class="control">
+                  <div class="control-label">
+                    <label for="qualityRange">Quality</label>
+                    <output id="qualityValue" for="qualityRange">High - 1920x1080</output>
+                  </div>
+                  <input id="qualityRange" type="range" min="1" max="3" value="3" step="1" />
+                </div>
+
+                <label class="toggle-row">
+                  <span>
+                    <strong>Ken Burns</strong>
+                    <small>Slow zoom towards photo subject</small>
+                  </span>
+                  <input id="kenBurnsToggle" type="checkbox" checked />
+                </label>
+
+                <label class="toggle-row">
+                  <span>
+                    <strong>Fill Background</strong>
+                    <small>Blurry background parallax effect</small>
+                  </span>
+                  <input id="fillBackgroundToggle" type="checkbox" checked />
+                </label>
+
+                <fieldset class="transition-group">
+                  <legend>Transition</legend>
+                  <label><input type="radio" name="transition" value="fade" checked /> Dissolve</label>
+                  <label><input type="radio" name="transition" value="hardcut" /> Hard cut</label>
+                  <label><input type="radio" name="transition" value="slideleft" /> Slide</label>
+                  <label><input type="radio" name="transition" value="wipeleft" /> Wipe</label>
+                  <label><input type="radio" name="transition" value="random" /> Random</label>
+                </fieldset>
+              </section>
+
+            </div>
+          </details>
+
+          <section class="render-panel" aria-labelledby="preview-title">
+            <div>
+              <h2 id="preview-title">Preview</h2>
+              <p id="statusText" aria-live="polite"></p>
+            </div>
+
+            <div id="livePreview" class="live-preview">
+              <video id="previewVideo" controls autoplay muted loop playsinline></video>
+              <span id="previewStatus" class="preview-status">Add photos to preview</span>
+            </div>
+            <progress id="progressBar" value="0" max="1"></progress>
+          </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
