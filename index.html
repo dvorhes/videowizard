@@ -3,20 +3,64 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Video Wizard Slideshow Generator</title>
+    <title>Video Wizard</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="shell">
       <section class="workspace" aria-labelledby="app-title">
         <header class="masthead">
+          <div class="brand-nav">
+            <button
+              id="brandMenuButton"
+              class="brand-logo-button"
+              type="button"
+              aria-label="Open Video Wizard navigation"
+              aria-expanded="false"
+              aria-controls="brandMenu"
+            >
+              <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
+            </button>
+            <nav id="brandMenu" class="brand-menu" aria-label="Video Wizard functions" hidden>
+              <a href="/" data-route="slideshow">
+                <span>Slideshow Generator</span>
+                <small>Create photo slideshows</small>
+              </a>
+              <a href="/captions" data-route="captions">
+                <span>Captions</span>
+                <small>Add captions to videos</small>
+              </a>
+            </nav>
+          </div>
           <div class="brand">
-            <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
             <h1 id="app-title">Slideshow Generator</h1>
+          </div>
+          <div id="captionHelp" class="page-help" hidden>
+            <button
+              id="captionHelpButton"
+              class="page-help-button"
+              type="button"
+              aria-label="How captions works"
+              aria-expanded="false"
+              aria-controls="captionHelpPopover"
+            >
+              ?
+            </button>
+            <div id="captionHelpPopover" class="page-help-popover" role="dialog" aria-label="How captions works" hidden>
+              <p><strong>How this tool works</strong></p>
+              <ol>
+                <li>Add a local video.</li>
+                <li>The app transcribes it in your browser and fills the captions editor.</li>
+                <li>Edit the words or line breaks, then style the captions in Settings.</li>
+                <li>Use Preview to check timing and layout.</li>
+                <li>Export a captioned video, SRT, or EDL + PNG package.</li>
+              </ol>
+              <p>No cloud upload: this tool transcribes, previews, renders, and exports directly in your browser.</p>
+            </div>
           </div>
         </header>
 
-        <div class="grid">
+        <div id="slideshowPage" class="page-view grid" data-page="slideshow">
           <section class="panel source-panel" aria-labelledby="photos-title">
             <div class="panel-heading">
               <div>
@@ -146,6 +190,233 @@
             </div>
             <progress id="progressBar" value="0" max="1"></progress>
           </section>
+          </aside>
+        </div>
+
+        <div id="captionsPage" class="page-view captions-page" data-page="captions" hidden>
+          <section class="panel captions-panel" aria-label="Captions">
+            <div class="caption-subsection">
+              <h3 class="caption-subsection-title">Video</h3>
+              <label class="dropzone captions-dropzone" for="captionVideoInput">
+                <input id="captionVideoInput" type="file" accept="video/*" />
+                <span class="drop-icon">+</span>
+                <span class="drop-title">Add Video</span>
+                <span id="captionVideoName" class="drop-copy"></span>
+              </label>
+            </div>
+
+            <div class="caption-subsection">
+              <h3 class="caption-subsection-title">Export</h3>
+              <div class="caption-actions">
+                <button id="renderCaptionsButton" class="secondary" type="button" disabled>Video</button>
+                <button id="exportSrtButton" class="secondary" type="button" disabled>SRT</button>
+                <button id="exportEdlPngButton" class="secondary" type="button" disabled>EDL + PNG</button>
+              </div>
+              <div id="captionProgressGroup" class="caption-progress" hidden>
+                <div class="caption-progress-header">
+                  <span id="captionProgressLabel" class="caption-progress-label">Waiting for video</span>
+                  <output id="captionProgressPercent" for="captionProgressBar">0%</output>
+                </div>
+                <progress id="captionProgressBar" value="0" max="100"></progress>
+              </div>
+
+              <p id="captionStatus" class="output-location" aria-live="polite"></p>
+              <p id="captionDiagnostics" class="caption-diagnostics" aria-live="polite"></p>
+            </div>
+
+            <div class="caption-subsection">
+              <h3 class="caption-subsection-title">Captions</h3>
+              <label class="caption-editor">
+                <textarea
+                  id="captionEditor"
+                  spellcheck="true"
+                  placeholder="Transcribed captions will appear here."
+                ></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="caption-preview-column" aria-labelledby="caption-preview-title">
+            <div class="render-panel">
+              <div>
+                <h2 id="caption-preview-title">Preview</h2>
+              </div>
+
+              <div class="caption-preview">
+                <div class="caption-preview-frame" tabindex="0" role="button" aria-label="Preview player">
+                  <video id="captionPreviewVideo" playsinline preload="auto"></video>
+                  <canvas id="captionPreviewCanvas" class="caption-preview-canvas" aria-hidden="true"></canvas>
+                  <span id="captionPreviewStatus" aria-hidden="true"></span>
+                </div>
+                <div class="caption-preview-controls" aria-label="Preview playback controls">
+                  <button id="captionPreviewPlay" class="icon-button" type="button" disabled>Play</button>
+                  <output id="captionPreviewTime">0:00 / 0:00</output>
+                  <input id="captionPreviewSeek" type="range" min="0" max="1000" value="0" step="1" disabled aria-label="Preview time" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="caption-tools" aria-labelledby="caption-tools-title">
+            <section class="render-panel">
+              <div>
+                <h2 id="caption-tools-title">Settings</h2>
+              </div>
+
+              <div class="caption-settings">
+                <div class="caption-row caption-row-font">
+                  <label class="caption-select-control compact">
+                    <span>Font</span>
+                    <select id="captionFont">
+                      <option value="TikTok Sans Semibold">TikTok Sans Semibold</option>
+                      <option value="Lato">Lato</option>
+                      <option value="Crimson Text">Crimson Text</option>
+                      <option value="Merriweather">Merriweather</option>
+                    </select>
+                  </label>
+                  <label class="caption-color-control">
+                    <span>Color</span>
+                    <input id="captionColor" type="color" value="#ffffff" />
+                  </label>
+                </div>
+
+                <div class="caption-row caption-row-position-size-paragraph">
+                  <div class="caption-point-control">
+                    <span>Position</span>
+                    <div class="caption-position-inline">
+                      <label class="caption-position-value" for="captionPositionXValue">
+                        <input id="captionPositionXValue" class="inline-value-input inline-value-link" type="number" min="0" max="1080" value="540" step="1" aria-label="Caption X position value" readonly />
+                      </label>
+                      <input id="captionPositionX" class="visually-hidden-slider" type="range" min="0" max="100" value="50" step="1" />
+                      <span class="caption-position-comma">,</span>
+                      <label class="caption-position-value" for="captionPositionYValue">
+                        <input id="captionPositionYValue" class="inline-value-input inline-value-link" type="number" min="0" max="1920" value="1600" step="1" aria-label="Caption Y position value" readonly />
+                      </label>
+                      <input id="captionPositionY" class="visually-hidden-slider" type="range" min="0" max="100" value="50" step="1" />
+                    </div>
+                  </div>
+
+                  <div class="caption-slider-control compact-size-control">
+                    <div class="control-label">
+                      <label for="captionFontSize">Size</label>
+                      <input id="captionFontSizeValue" class="inline-value-input" type="number" min="12" max="120" value="50" step="1" aria-label="Size value" readonly />
+                    </div>
+                    <input id="captionFontSize" type="range" min="12" max="120" value="50" step="1" />
+                  </div>
+
+                  <div class="caption-paragraph-control">
+                    <span>Paragraph</span>
+                    <div class="caption-segmented-control paragraph-control" role="tablist" aria-label="Paragraph alignment">
+                      <button class="caption-segment paragraph-segment" type="button" data-caption-align-value="left" aria-label="Left align">
+                        <span class="paragraph-lines left">
+                          <span></span><span></span><span></span>
+                        </span>
+                      </button>
+                      <button class="caption-segment is-active paragraph-segment" type="button" data-caption-align-value="center" aria-label="Center align">
+                        <span class="paragraph-lines center">
+                          <span></span><span></span><span></span>
+                        </span>
+                      </button>
+                      <button class="caption-segment paragraph-segment" type="button" data-caption-align-value="right" aria-label="Right align">
+                        <span class="paragraph-lines right">
+                          <span></span><span></span><span></span>
+                        </span>
+                      </button>
+                    </div>
+                    <input id="captionParagraphAlign" type="hidden" value="center" />
+                  </div>
+                </div>
+
+                <div class="caption-row caption-value-row two-up">
+                  <label class="caption-plain-control" for="captionLengthValue">
+                    <span>Caption length</span>
+                    <input id="captionLengthValue" class="inline-value-input inline-value-link" type="text" inputmode="numeric" value="28" aria-label="Caption length value" readonly />
+                  </label>
+                  <input id="captionLength" class="visually-hidden-slider" type="range" min="1" max="80" value="28" step="1" />
+                  <label class="caption-plain-control" for="captionLinesValue">
+                    <span>Lines per caption</span>
+                    <input id="captionLinesValue" class="inline-value-input inline-value-link" type="number" min="1" max="4" value="2" step="1" aria-label="Lines per caption value" readonly />
+                  </label>
+                  <input id="captionLines" class="visually-hidden-slider" type="range" min="1" max="4" value="2" step="1" />
+                </div>
+
+                <div class="caption-row caption-effect-row">
+                  <label class="caption-effect-toggle" for="captionStrokeEnabled">
+                    <input id="captionStrokeEnabled" type="checkbox" />
+                    <span>Stroke</span>
+                  </label>
+                  <label class="caption-color-control compact bare-color" aria-label="Stroke color">
+                    <input id="captionStrokeColor" type="color" value="#000000" />
+                  </label>
+                  <div class="caption-slider-control bare-slider-control">
+                    <input id="captionStroke" type="range" min="0" max="20" value="10" step="1" />
+                  </div>
+                  <input id="captionStrokeValue" class="inline-value-input inline-value-link effect-value-input" type="number" min="0" max="20" value="10" step="1" aria-label="Stroke size value" readonly />
+                </div>
+
+                <div class="caption-row caption-effect-row">
+                  <label class="caption-effect-toggle multiline" for="captionDropShadowEnabled">
+                    <input id="captionDropShadowEnabled" type="checkbox" />
+                    <span>Drop<br />Shadow</span>
+                  </label>
+                  <label class="caption-color-control compact bare-color" aria-label="Drop shadow color">
+                    <input id="captionDropShadowColor" type="color" value="#000000" />
+                  </label>
+                  <div class="caption-slider-control bare-slider-control">
+                    <input id="captionDropShadow" type="range" min="0" max="10" value="7" step="1" />
+                  </div>
+                  <input id="captionDropShadowValue" class="inline-value-input inline-value-link effect-value-input" type="number" min="0" max="10" value="7" step="1" aria-label="Drop shadow value" readonly />
+                </div>
+
+                <div class="caption-row caption-value-row two-up">
+                  <label class="caption-plain-control" for="captionTrackingValue">
+                    <span>Tracking</span>
+                    <input id="captionTrackingValue" class="inline-value-input inline-value-link" type="number" min="-10" max="30" value="0" step="1" aria-label="Tracking value" readonly />
+                  </label>
+                  <input id="captionTracking" class="visually-hidden-slider" type="range" min="-10" max="30" value="0" step="1" />
+                  <label id="captionLeadingControl" class="caption-plain-control" for="captionLeadingValue">
+                    <span>Leading</span>
+                    <input id="captionLeadingValue" class="inline-value-input inline-value-link" type="number" min="-200" max="9999" value="15" step="1" aria-label="Leading value" readonly />
+                  </label>
+                  <input id="captionLeading" class="visually-hidden-slider" type="range" min="-200" max="9999" value="15" step="1" />
+                </div>
+
+                <div class="caption-row caption-box-row">
+                  <div class="caption-box-field">
+                    <span class="caption-box-field-label">Text box</span>
+                    <div class="caption-segmented-control caption-box-toggle" role="tablist" aria-label="Text box mode">
+                      <button class="caption-segment is-active" type="button" data-caption-box-value="none">None</button>
+                      <button class="caption-segment" type="button" data-caption-box-value="whole">Rectangle</button>
+                      <button class="caption-segment" type="button" data-caption-box-value="line">Per line</button>
+                    </div>
+                    <input id="captionTextBox" type="hidden" value="none" />
+                  </div>
+                </div>
+
+                <div class="caption-row text-box-detail-row" hidden>
+                  <label class="caption-color-control compact bare-color text-box-color-control" aria-label="Text box color">
+                    <span>Color</span>
+                    <input id="captionTextBoxColor" type="color" value="#000000" />
+                  </label>
+                  <label class="caption-plain-control compact text-box-detail-control" for="captionTextBoxOpacityValue">
+                    <span>Opacity</span>
+                    <input id="captionTextBoxOpacityValue" class="inline-value-input inline-value-link" type="number" min="0" max="100" value="100" step="1" aria-label="Text box opacity value" readonly />
+                  </label>
+                  <input id="captionTextBoxOpacity" class="visually-hidden-slider" type="range" min="0" max="100" value="100" step="1" />
+                  <label class="caption-plain-control compact roundness-control text-box-detail-control" for="captionTextBoxRoundnessValue">
+                    <span>Roundness</span>
+                    <input id="captionTextBoxRoundnessValue" class="inline-value-input inline-value-link" type="number" min="0" max="100" value="15" step="1" aria-label="Text box roundness value" readonly />
+                  </label>
+                  <input id="captionTextBoxRoundness" class="visually-hidden-slider" type="range" min="0" max="100" value="15" step="1" />
+                  <label id="captionPaddingControl" class="caption-plain-control compact text-box-detail-control padding-detail-control" for="captionTextBoxPaddingValue">
+                    <span>Padding</span>
+                    <input id="captionTextBoxPaddingValue" class="inline-value-input inline-value-link" type="number" min="0" max="9999" value="30" step="1" aria-label="Text box padding value" readonly />
+                  </label>
+                  <input id="captionTextBoxPadding" class="visually-hidden-slider" type="range" min="0" max="9999" value="30" step="1" />
+                </div>
+
+              </div>
+            </section>
           </aside>
         </div>
       </section>

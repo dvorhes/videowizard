@@ -1,7 +1,101 @@
 import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
 import { fetchFile, toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
 
+const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2";
+const WHISPER_CHUNK_SECONDS = 24;
+const WHISPER_STRIDE_SECONDS = 4;
+const CAPTION_WHISPER_MODEL = "onnx-community/whisper-base.en_timestamped";
+const CAPTION_WHISPER_MODEL_LABEL = "Whisper Base English";
+const CAPTION_SNAP_TOLERANCE_FRAMES = 5;
+const CAPTION_JOIN_GAP_SECONDS = 0.5;
+const CAPTION_HOLD_SECONDS = 0.75;
+const CAPTION_CUTPOINT_PIN_SECONDS = 0.12;
+const MIN_CAPTION_DURATION_SECONDS = 0.05;
+const ONE_WORD_CAPTION_LENGTH_THRESHOLD = 6;
+const DEFAULT_CAPTION_FONT = "TikTok Sans Semibold";
+const CAPTION_SPACING_REFERENCE_FONT_SIZE = 50;
+const CAPTION_FONT_FAMILIES = new Set([
+  "TikTok Sans Semibold",
+  "Lato",
+  "Crimson Text",
+  "Merriweather",
+]);
+const CRC32_TABLE = new Uint32Array(Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+  }
+  return value >>> 0;
+}));
 const els = {
+  appTitle: document.querySelector("#app-title"),
+  brandMenuButton: document.querySelector("#brandMenuButton"),
+  brandMenu: document.querySelector("#brandMenu"),
+  captionHelp: document.querySelector("#captionHelp"),
+  captionHelpButton: document.querySelector("#captionHelpButton"),
+  captionHelpPopover: document.querySelector("#captionHelpPopover"),
+  slideshowPage: document.querySelector("#slideshowPage"),
+  captionsPage: document.querySelector("#captionsPage"),
+  captionVideoInput: document.querySelector("#captionVideoInput"),
+  captionVideoName: document.querySelector("#captionVideoName"),
+  captionVideoDropIcon: document.querySelector(".captions-dropzone .drop-icon"),
+  captionVideoDropTitle: document.querySelector(".captions-dropzone .drop-title"),
+  renderCaptionsButton: document.querySelector("#renderCaptionsButton"),
+  exportSrtButton: document.querySelector("#exportSrtButton"),
+  exportEdlPngButton: document.querySelector("#exportEdlPngButton"),
+  captionProgressGroup: document.querySelector("#captionProgressGroup"),
+  captionProgressLabel: document.querySelector("#captionProgressLabel"),
+  captionProgressPercent: document.querySelector("#captionProgressPercent"),
+  captionProgressBar: document.querySelector("#captionProgressBar"),
+  captionStatus: document.querySelector("#captionStatus"),
+  captionDiagnostics: document.querySelector("#captionDiagnostics"),
+  captionEditor: document.querySelector("#captionEditor"),
+  captionFont: document.querySelector("#captionFont"),
+  captionFontSize: document.querySelector("#captionFontSize"),
+  captionFontSizeValue: document.querySelector("#captionFontSizeValue"),
+  captionParagraphAlign: document.querySelector("#captionParagraphAlign"),
+  captionParagraphButtons: document.querySelectorAll("[data-caption-align-value]"),
+  captionColor: document.querySelector("#captionColor"),
+  captionStroke: document.querySelector("#captionStroke"),
+  captionStrokeValue: document.querySelector("#captionStrokeValue"),
+  captionStrokeEnabled: document.querySelector("#captionStrokeEnabled"),
+  captionStrokeColor: document.querySelector("#captionStrokeColor"),
+  captionDropShadow: document.querySelector("#captionDropShadow"),
+  captionDropShadowValue: document.querySelector("#captionDropShadowValue"),
+  captionDropShadowEnabled: document.querySelector("#captionDropShadowEnabled"),
+  captionDropShadowColor: document.querySelector("#captionDropShadowColor"),
+  captionTracking: document.querySelector("#captionTracking"),
+  captionTrackingValue: document.querySelector("#captionTrackingValue"),
+  captionLeading: document.querySelector("#captionLeading"),
+  captionLeadingValue: document.querySelector("#captionLeadingValue"),
+  captionLeadingControl: document.querySelector("#captionLeadingControl"),
+  captionPositionX: document.querySelector("#captionPositionX"),
+  captionPositionXValue: document.querySelector("#captionPositionXValue"),
+  captionPositionY: document.querySelector("#captionPositionY"),
+  captionPositionYValue: document.querySelector("#captionPositionYValue"),
+  captionTextBox: document.querySelector("#captionTextBox"),
+  captionTextBoxButtons: document.querySelectorAll("[data-caption-box-value]"),
+  captionTextBoxDetailRow: document.querySelector(".text-box-detail-row"),
+  captionTextBoxColor: document.querySelector("#captionTextBoxColor"),
+  captionTextBoxOpacity: document.querySelector("#captionTextBoxOpacity"),
+  captionTextBoxOpacityValue: document.querySelector("#captionTextBoxOpacityValue"),
+  captionTextBoxRoundness: document.querySelector("#captionTextBoxRoundness"),
+  captionTextBoxRoundnessValue: document.querySelector("#captionTextBoxRoundnessValue"),
+  captionTextBoxPadding: document.querySelector("#captionTextBoxPadding"),
+  captionTextBoxPaddingValue: document.querySelector("#captionTextBoxPaddingValue"),
+  captionPaddingControl: document.querySelector("#captionPaddingControl"),
+  captionLength: document.querySelector("#captionLength"),
+  captionLengthValue: document.querySelector("#captionLengthValue"),
+  captionLines: document.querySelector("#captionLines"),
+  captionLinesValue: document.querySelector("#captionLinesValue"),
+  captionPreview: document.querySelector(".caption-preview"),
+  captionPreviewFrame: document.querySelector(".caption-preview-frame"),
+  captionPreviewVideo: document.querySelector("#captionPreviewVideo"),
+  captionPreviewCanvas: document.querySelector("#captionPreviewCanvas"),
+  captionPreviewStatus: document.querySelector("#captionPreviewStatus"),
+  captionPreviewPlay: document.querySelector("#captionPreviewPlay"),
+  captionPreviewSeek: document.querySelector("#captionPreviewSeek"),
+  captionPreviewTime: document.querySelector("#captionPreviewTime"),
   photoInput: document.querySelector("#photoInput"),
   photoStrip: document.querySelector("#photoStrip"),
   trashDrop: document.querySelector("#trashDrop"),
@@ -40,6 +134,37 @@ const state = {
   previewDebounce: null,
   previewToken: 0,
   previewObjectUrl: null,
+  captionVideo: null,
+  captionVideoUrl: null,
+  captionVideoGeometry: null,
+  captionJobId: null,
+  captionTranscript: null,
+  captionTranscriptRaw: null,
+  captionSpeechOnset: null,
+  captionCutPoints: [],
+  captions: [],
+  captionOutputUrl: null,
+  transformersModule: null,
+  captionTranscriber: null,
+  captionTranscriberModel: null,
+  captionTranscriberDevice: null,
+  captionTranscriptionAbort: null,
+  captionEditDebounce: null,
+  captionSourceWords: [],
+  captionPreviewAnimation: null,
+  captionVisibleCrop: null,
+  captionAnalysisToken: 0,
+  captionSettingsHistory: [],
+  captionPendingSettingsSnapshot: null,
+  isRestoringCaptionSettings: false,
+  captionFontReady: false,
+  captionFontReadyPromise: null,
+  captionLoadedFonts: new Set(),
+  captionFontReadyPromises: new Map(),
+  activeInlineDrag: null,
+  captionPositionInitialized: false,
+  captionProgressSmoothTimer: null,
+  captionProgressSmooth: null,
 };
 
 const transitionMap = {
@@ -54,6 +179,117 @@ const qualityPresets = {
   3: { label: "High", width: 1920, height: 1080, jpegQuality: 0.96, crf: "20" },
 };
 
+const routes = {
+  "/": {
+    key: "slideshow",
+    title: "Slideshow Generator",
+    page: els.slideshowPage,
+  },
+  "/captions": {
+    key: "captions",
+    title: "Captions",
+    page: els.captionsPage,
+  },
+};
+
+els.brandMenuButton.addEventListener("click", toggleBrandMenu);
+els.brandMenu.addEventListener("click", handleBrandMenuClick);
+els.captionHelpButton.addEventListener("click", toggleCaptionHelp);
+document.addEventListener("click", closeBrandMenuOnOutsideClick);
+document.addEventListener("click", closeCaptionHelpOnOutsideClick);
+document.addEventListener("keydown", handleGlobalKeydown);
+window.addEventListener("popstate", renderRoute);
+window.addEventListener("resize", () => {
+  if (state.captionVideoGeometry?.width && state.captionVideoGeometry?.height) {
+    applyCaptionPreviewGeometry(state.captionVideoGeometry);
+    updateCaptionOverlay();
+  }
+});
+els.captionVideoInput.addEventListener("change", handleCaptionVideo);
+els.renderCaptionsButton.addEventListener("click", renderCaptionedVideo);
+els.exportSrtButton.addEventListener("click", exportCaptionSrt);
+els.exportEdlPngButton.addEventListener("click", exportCaptionEdlPng);
+els.captionEditor.addEventListener("input", handleCaptionEditorInput);
+els.captionEditor.addEventListener("click", handleCaptionCursorActivity);
+els.captionEditor.addEventListener("keyup", handleCaptionCursorActivity);
+els.captionEditor.addEventListener("keydown", handleCaptionEditorKeydown);
+els.captionEditor.addEventListener("select", handleCaptionCursorActivity);
+els.captionPreviewVideo.addEventListener("timeupdate", updateCaptionOverlay);
+els.captionPreviewVideo.addEventListener("seeked", updateCaptionOverlay);
+els.captionPreviewVideo.addEventListener("play", () => {
+  updateCaptionPreviewControls();
+  updateCaptionOverlay();
+});
+els.captionPreviewVideo.addEventListener("pause", () => {
+  updateCaptionPreviewControls();
+  updateCaptionOverlay();
+});
+els.captionPreviewVideo.addEventListener("loadeddata", updateCaptionOverlay);
+els.captionPreviewVideo.addEventListener("loadedmetadata", () => {
+  updateCaptionPreviewControls();
+  updateCaptionOverlay();
+});
+els.captionPreviewPlay.addEventListener("click", toggleCaptionPreviewPlayback);
+els.captionPreviewFrame.addEventListener("click", handleCaptionPreviewClick);
+els.captionPreviewFrame.addEventListener("keydown", handleCaptionPreviewKeydown);
+els.captionPreviewSeek.addEventListener("input", handleCaptionPreviewSeek);
+[els.captionLength, els.captionLines].forEach((input) => {
+  input.addEventListener("focus", captureCaptionSettingsSnapshot);
+  input.addEventListener("pointerdown", captureCaptionSettingsSnapshot);
+  input.addEventListener("keydown", captureCaptionSettingsSnapshot);
+  input.addEventListener("input", handleCaptionLayoutChange);
+  input.addEventListener("change", commitCaptionSettingsSnapshot);
+  input.addEventListener("blur", commitCaptionSettingsSnapshot);
+});
+[els.captionFont, els.captionFontSize, els.captionParagraphAlign, els.captionColor, els.captionStroke, els.captionStrokeEnabled, els.captionStrokeColor, els.captionDropShadow, els.captionDropShadowEnabled, els.captionDropShadowColor, els.captionTracking, els.captionLeading, els.captionPositionX, els.captionPositionY, els.captionTextBox, els.captionTextBoxColor, els.captionTextBoxOpacity, els.captionTextBoxRoundness, els.captionTextBoxPadding].forEach((input) => {
+  input.addEventListener("focus", captureCaptionSettingsSnapshot);
+  input.addEventListener("pointerdown", captureCaptionSettingsSnapshot);
+  input.addEventListener("keydown", captureCaptionSettingsSnapshot);
+  input.addEventListener("input", handleCaptionStyleChange);
+  input.addEventListener("change", handleCaptionStyleChange);
+  input.addEventListener("change", commitCaptionSettingsSnapshot);
+  input.addEventListener("blur", commitCaptionSettingsSnapshot);
+});
+[
+  [els.captionFontSizeValue, els.captionFontSize],
+  [els.captionStrokeValue, els.captionStroke],
+  [els.captionDropShadowValue, els.captionDropShadow],
+  [els.captionTrackingValue, els.captionTracking],
+  [els.captionLeadingValue, els.captionLeading],
+  [els.captionPositionXValue, els.captionPositionX],
+  [els.captionPositionYValue, els.captionPositionY],
+  [els.captionTextBoxOpacityValue, els.captionTextBoxOpacity],
+  [els.captionTextBoxRoundnessValue, els.captionTextBoxRoundness],
+  [els.captionTextBoxPaddingValue, els.captionTextBoxPadding],
+  [els.captionLengthValue, els.captionLength],
+  [els.captionLinesValue, els.captionLines],
+].forEach(([valueInput, slider]) => {
+  valueInput.addEventListener("focus", captureCaptionSettingsSnapshot);
+  valueInput.addEventListener("pointerdown", captureCaptionSettingsSnapshot);
+  valueInput.addEventListener("pointerdown", (event) => beginInlineValueDrag(event, valueInput, slider));
+  valueInput.addEventListener("click", (event) => handleInlineValueClick(event, valueInput));
+  valueInput.addEventListener("keydown", (event) => handleInlineValueKeydown(event, valueInput, slider));
+  valueInput.addEventListener("blur", () => commitInlineValueInput(valueInput, slider));
+});
+els.captionTextBoxButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    captureCaptionSettingsSnapshot();
+    setCaptionTextBoxMode(button.dataset.captionBoxValue || "none");
+    handleCaptionStyleChange();
+    commitCaptionSettingsSnapshot();
+  });
+});
+els.captionParagraphButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    captureCaptionSettingsSnapshot();
+    setCaptionParagraphAlign(button.dataset.captionAlignValue || "center");
+    handleCaptionStyleChange();
+    commitCaptionSettingsSnapshot();
+  });
+});
+document.addEventListener("pointermove", handleInlineValueDragMove);
+document.addEventListener("pointerup", endInlineValueDrag);
+document.addEventListener("pointercancel", endInlineValueDrag);
 els.durationRange.addEventListener("input", updateTimingLabels);
 els.transitionDuration.addEventListener("input", updateTimingLabels);
 els.qualityRange.addEventListener("input", handleSettingsChange);
@@ -73,6 +309,2830 @@ document
 
 updateTimingLabels();
 updateOutputLocation();
+updateCaptionSettingsLabels();
+updateCaptionActionAvailability();
+resetCaptionProgress();
+setCaptionTextBoxMode(els.captionTextBox.value || "none");
+setCaptionParagraphAlign(els.captionParagraphAlign.value || "center");
+ensureCaptionFontReady();
+renderRoute();
+
+function toggleBrandMenu(event) {
+  event.stopPropagation();
+  els.brandMenuButton.classList.remove("is-jittering");
+  void els.brandMenuButton.offsetWidth;
+  els.brandMenuButton.classList.add("is-jittering");
+  setBrandMenuOpen(els.brandMenu.hidden);
+}
+
+function setBrandMenuOpen(isOpen) {
+  els.brandMenu.hidden = !isOpen;
+  els.brandMenuButton.setAttribute("aria-expanded", String(isOpen));
+}
+
+function closeBrandMenuOnOutsideClick(event) {
+  if (els.brandMenu.hidden) return;
+  if (event.target.closest(".brand-nav")) return;
+  setBrandMenuOpen(false);
+}
+
+function handleGlobalKeydown(event) {
+  if (event.key === "Escape") {
+    setBrandMenuOpen(false);
+    closeCaptionHelp();
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && shouldHandleCaptionSettingsUndo(event.target)) {
+    event.preventDefault();
+    undoCaptionSettingsChange();
+  }
+}
+
+function handleBrandMenuClick(event) {
+  const link = event.target.closest("a[data-route]");
+  if (!link) return;
+  event.preventDefault();
+  const url = new URL(link.href);
+  if (url.pathname !== window.location.pathname) {
+    history.pushState({}, "", url.pathname);
+  }
+  renderRoute();
+  setBrandMenuOpen(false);
+}
+
+function renderRoute() {
+  const route = routes[window.location.pathname] || routes["/"];
+  Object.values(routes).forEach((item) => {
+    item.page.hidden = item.key !== route.key;
+  });
+  els.appTitle.textContent = route.title;
+  els.captionHelp.hidden = route.key !== "captions";
+  if (route.key !== "captions") closeCaptionHelp();
+  document.title = `Video Wizard ${route.title}`;
+  els.brandMenu
+    .querySelectorAll("a[data-route]")
+    .forEach((link) => {
+      link.setAttribute("aria-current", link.dataset.route === route.key ? "page" : "false");
+    });
+}
+
+function toggleCaptionHelp(event) {
+  event.stopPropagation();
+  const shouldOpen = els.captionHelpPopover.hidden;
+  els.captionHelpPopover.hidden = !shouldOpen;
+  els.captionHelpButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+}
+
+function closeCaptionHelp() {
+  els.captionHelpPopover.hidden = true;
+  els.captionHelpButton.setAttribute("aria-expanded", "false");
+}
+
+function closeCaptionHelpOnOutsideClick(event) {
+  if (els.captionHelp.hidden || els.captionHelpPopover.hidden) return;
+  if (event.target.closest("#captionHelp")) return;
+  closeCaptionHelp();
+}
+
+function handleCaptionVideo(event) {
+  const file = event.target.files[0] || null;
+  const token = ++state.captionAnalysisToken;
+  state.captionVideo = file;
+  state.captionVideoGeometry = null;
+  state.captionJobId = null;
+  state.captionTranscript = null;
+  state.captionTranscriptRaw = null;
+  state.captionSpeechOnset = null;
+  state.captionPositionInitialized = false;
+  state.captionCutPoints = [];
+  state.captions = [];
+  state.captionSourceWords = [];
+  state.captionVisibleCrop = null;
+  els.captionEditor.value = "";
+  setCaptionDiagnostics("");
+  clearCaptionPreviewCanvas();
+  updateCaptionActionAvailability();
+
+  if (state.captionVideoUrl) URL.revokeObjectURL(state.captionVideoUrl);
+  state.captionVideoUrl = file ? URL.createObjectURL(file) : null;
+  resetCaptionPreviewGeometry();
+  els.captionPreview.classList.toggle("has-video", Boolean(file));
+  updateCaptionPreviewControls();
+  els.captionVideoName.textContent = file ? file.name : "";
+  els.captionVideoDropIcon.textContent = "+";
+  els.captionVideoDropIcon.hidden = Boolean(file);
+  els.captionVideoDropTitle.hidden = Boolean(file);
+  setCaptionStatus(file ? "" : "Load a local video file.");
+  if (file) {
+    setCaptionProgress(0, "Video loaded");
+  } else {
+    resetCaptionProgress();
+  }
+
+  if (file) {
+    els.captionPreviewVideo.addEventListener("loadedmetadata", handleCaptionPreviewMetadata, {
+      once: true,
+    });
+  }
+  els.captionPreviewVideo.preload = "auto";
+  els.captionPreviewVideo.src = state.captionVideoUrl || "";
+  els.captionPreviewVideo.load();
+  if (!file) {
+    els.captionPreviewVideo.removeAttribute("src");
+    els.captionPreviewVideo.load();
+    setCaptionBusy(false);
+    return;
+  }
+
+  analyzeCaptionVideo(token);
+}
+
+async function analyzeCaptionVideo(token = state.captionAnalysisToken) {
+  if (!state.captionVideo) {
+    setCaptionStatus("Choose a video first.");
+    return;
+  }
+
+  setCaptionBusy(true);
+  setCaptionProgress(3, "Preparing transcription");
+  setCaptionStatus("");
+  setCaptionDiagnostics("");
+  state.captionJobId = null;
+
+  try {
+    const cutPointsPromise = prepareCaptionCutPoints({ silent: true, token });
+    const payload = await analyzeCaptionVideoInBrowser();
+    if (token !== state.captionAnalysisToken) return;
+    state.captionTranscript = payload.transcript;
+    state.captionTranscriptRaw = payload.transcript.raw || null;
+    state.captionSourceWords = payload.transcript.words.map((word) => ({ ...word }));
+    state.captionVideoGeometry = payload.metadata || state.captionVideoGeometry;
+    applyCaptionPreviewGeometry(state.captionVideoGeometry);
+    await cutPointsPromise;
+    if (token !== state.captionAnalysisToken) return;
+    state.captions = buildCaptionsFromWords(
+      state.captionTranscript.words,
+      state.captionCutPoints,
+      getCaptionSettingsWithGeometry(),
+    );
+    updateCaptionEditorFromCaptions();
+    updateCaptionActionAvailability();
+    updateCaptionOverlay();
+    setCaptionProgress(100, "Done");
+    window.setTimeout(() => {
+      if (token === state.captionAnalysisToken && state.captionTranscript?.words?.length) {
+        setCaptionStatus("");
+        setCaptionDiagnostics("");
+        resetCaptionProgress();
+      }
+    }, 900);
+  } catch (error) {
+    if (token !== state.captionAnalysisToken) return;
+    stopCaptionProgressSmoothing();
+    setCaptionStatus(normalizeError(error));
+  } finally {
+    if (token === state.captionAnalysisToken) {
+      setCaptionBusy(false);
+    }
+  }
+}
+
+async function analyzeCaptionVideoInBrowser() {
+  const metadata = await getCaptionVideoMetadata();
+  state.captionVideoGeometry = metadata;
+  applyCaptionPreviewGeometry(metadata);
+  startCaptionProgressSmoothing(estimateCaptionAnalysisDuration(metadata), "Preparing transcription");
+
+  setCaptionProgress(8, "Reading video metadata");
+  const audio = await prepareWhisperAudio(state.captionVideo);
+
+  const transcriber = await getBrowserWhisperTranscriber();
+  const startedAt = performance.now();
+  const transcript = await transcribeAudioWithBuiltInChunking(transcriber, audio, 16000);
+  return { metadata, transcript };
+}
+
+async function transcribeAudioWithBuiltInChunking(transcriber, audio, sampleRate) {
+  const durationSeconds = audio.length / sampleRate;
+  const estimatedChunks = Math.max(
+    1,
+    Math.ceil(durationSeconds / Math.max(1, WHISPER_CHUNK_SECONDS - WHISPER_STRIDE_SECONDS)),
+  );
+
+  setCaptionProgress(35, "Transcribing");
+
+  const result = await transcriber(audio, {
+    return_timestamps: "word",
+    chunk_length_s: WHISPER_CHUNK_SECONDS,
+    stride_length_s: WHISPER_STRIDE_SECONDS,
+  });
+
+  setCaptionProgress(92, "Finishing");
+
+  const transcript = applySpeechOnsetCorrection(
+    normalizeBrowserTranscript(result, 0, 0, durationSeconds, 0),
+    state.captionSpeechOnset,
+  );
+
+  return {
+    ...transcript,
+    raw: {
+      video_name: state.captionVideo?.name || null,
+      model: CAPTION_WHISPER_MODEL,
+      sample_rate: sampleRate,
+      chunk_seconds: WHISPER_CHUNK_SECONDS,
+      stride_seconds: WHISPER_STRIDE_SECONDS,
+      duration_seconds: durationSeconds,
+      estimated_chunks: estimatedChunks,
+      result: structuredClone(result),
+    },
+  };
+}
+
+async function getBrowserWhisperTranscriber() {
+  const model = CAPTION_WHISPER_MODEL;
+  if (state.captionTranscriber && state.captionTranscriberModel === model) {
+    return state.captionTranscriber;
+  }
+
+  const { pipeline, env } = await getTransformersModule();
+  env.allowLocalModels = false;
+  env.allowRemoteModels = true;
+  env.backends.onnx.wasm.numThreads = Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1));
+
+  const supportsWebGPU = Boolean(navigator.gpu);
+  const device = supportsWebGPU ? "webgpu" : "wasm";
+  state.captionTranscriberDevice = device;
+  setCaptionProgress(10, "Loading");
+
+  try {
+    state.captionTranscriber = await pipeline("automatic-speech-recognition", model, {
+      device,
+      dtype: device === "webgpu" ? "q4" : "q8",
+      progress_callback: updateBrowserModelProgress,
+    });
+  } catch (error) {
+    if (device !== "webgpu") throw error;
+    state.captionTranscriberDevice = "wasm";
+    setCaptionProgress(10, "Loading");
+    state.captionTranscriber = await pipeline("automatic-speech-recognition", model, {
+      device: "wasm",
+      dtype: "q8",
+      progress_callback: updateBrowserModelProgress,
+    });
+  }
+
+  state.captionTranscriberModel = model;
+  return state.captionTranscriber;
+}
+
+async function getTransformersModule() {
+  if (!state.transformersModule) {
+    state.transformersModule = await import(TRANSFORMERS_CDN);
+  }
+  return state.transformersModule;
+}
+
+function updateBrowserModelProgress(progress) {
+  if (!progress) return;
+  if (progress.status === "progress" && Number.isFinite(progress.progress)) {
+    setCaptionProgress(
+      12 + Math.round(Math.max(0, Math.min(100, progress.progress)) * 0.23),
+      "Loading",
+    );
+    return;
+  }
+  if (progress.status === "ready") {
+    setCaptionProgress(35, "Loaded");
+    return;
+  }
+  if (progress.status) {
+    setCaptionProgress(10, "Loading");
+  }
+}
+
+async function prepareWhisperAudio(file) {
+  setCaptionProgress(10, "Preparing");
+  let audioBuffer;
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioContext = new AudioContext();
+    audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    await audioContext.close();
+  } catch (error) {
+    setCaptionProgress(14, "Preparing");
+    audioBuffer = await extractAudioBufferWithFFmpeg(file);
+  }
+  setCaptionProgress(18, "Prepared");
+  const mono = resampleToMono(audioBuffer, 16000);
+  state.captionSpeechOnset = detectSpeechOnset(mono, 16000);
+  return mono;
+}
+
+async function extractAudioBufferWithFFmpeg(file) {
+  await loadFFmpeg();
+  await cleanWorkspace();
+  const inputName = `caption-input.${extensionFromName(file.name, "mp4")}`;
+  const outputName = "caption-audio.wav";
+  await ffmpeg.writeFile(inputName, await fetchFile(file));
+  await ffmpeg.exec([
+    "-i",
+    inputName,
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-f",
+    "wav",
+    outputName,
+  ]);
+  const wavData = await ffmpeg.readFile(outputName);
+  const audioContext = new AudioContext({ sampleRate: 16000 });
+  const audioBuffer = await audioContext.decodeAudioData(wavData.buffer.slice(0));
+  await audioContext.close();
+  return audioBuffer;
+}
+
+function resampleToMono(audioBuffer, targetSampleRate) {
+  const sourceSampleRate = audioBuffer.sampleRate;
+  const sourceLength = audioBuffer.length;
+  const outputLength = Math.max(1, Math.round(sourceLength * targetSampleRate / sourceSampleRate));
+  const output = new Float32Array(outputLength);
+  const channels = Array.from({ length: audioBuffer.numberOfChannels }, (_, index) =>
+    audioBuffer.getChannelData(index),
+  );
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const sourceIndex = index * (sourceSampleRate / targetSampleRate);
+    const leftIndex = Math.floor(sourceIndex);
+    const rightIndex = Math.min(sourceLength - 1, leftIndex + 1);
+    const amount = sourceIndex - leftIndex;
+    let sample = 0;
+    channels.forEach((channel) => {
+      sample += channel[leftIndex] * (1 - amount) + channel[rightIndex] * amount;
+    });
+    output[index] = sample / channels.length;
+  }
+  return output;
+}
+
+function normalizeBrowserTranscript(
+  result,
+  timestampOffset = 0,
+  chunkStartSeconds = 0,
+  chunkDurationSeconds = Infinity,
+  wordIdOffset = 0,
+) {
+  const chunks = Array.isArray(result?.chunks) ? result.chunks : [];
+  const words = [];
+  let previousLocalEnd = 0;
+
+  chunks.forEach((chunk, index) => {
+    const timestamp = Array.isArray(chunk?.timestamp) ? chunk.timestamp : [];
+    const nextTimestamp = Array.isArray(chunks[index + 1]?.timestamp) ? chunks[index + 1].timestamp : [];
+    const text = stripNonDialogueText(chunk?.text || "");
+    if (!text) return;
+
+    const rawStart = Number(timestamp[0]);
+    const rawEnd = Number(timestamp[1]);
+    const nextRawStart = Number(nextTimestamp[0]);
+    let localStart = Number.isFinite(rawStart) ? Math.max(0, rawStart - timestampOffset) : null;
+    let localEnd = Number.isFinite(rawEnd) ? Math.max(0, rawEnd - timestampOffset) : null;
+    const estimatedDuration = estimateCaptionWordDuration(text);
+
+    if (localStart == null && localEnd == null) return;
+    if (localStart == null && localEnd != null) {
+      localStart = Math.max(previousLocalEnd, localEnd - estimatedDuration);
+    }
+    if (localEnd == null && localStart != null) {
+      localEnd = localStart + estimatedDuration;
+    }
+
+    if (localStart != null && localEnd != null) {
+      const duration = localEnd - localStart;
+      const nextStartsAtEnd = Number.isFinite(nextRawStart)
+        ? Math.abs((nextRawStart - timestampOffset) - localEnd) <= 0.08
+        : false;
+      const hasInflatedLeadingSilence = duration >= Math.max(0.7, estimatedDuration * 3.5);
+      const isStartOfFileInflation = index === 0 && localStart <= 0.02;
+      const isMidSentenceInflation = nextStartsAtEnd && localStart - previousLocalEnd >= 0.35;
+
+      if (hasInflatedLeadingSilence && (isStartOfFileInflation || isMidSentenceInflation)) {
+        localStart = Math.max(previousLocalEnd, localEnd - estimatedDuration);
+      }
+    }
+
+    localStart = Math.max(0, localStart ?? previousLocalEnd);
+    localEnd = Math.max(localStart + MIN_CAPTION_DURATION_SECONDS, localEnd ?? (localStart + estimatedDuration));
+    previousLocalEnd = localEnd;
+
+    const absoluteStart = chunkStartSeconds + localStart;
+    if (absoluteStart > chunkDurationSeconds + chunkStartSeconds + 0.25) return;
+
+    words.push({
+      id: `w${wordIdOffset + index + 1}`,
+      text,
+      start: absoluteStart,
+      end: chunkStartSeconds + localEnd,
+    });
+  });
+
+  return {
+    text: result?.text || words.map((word) => word.text).join(" "),
+    words: repairInflatedWordTimings(words),
+  };
+}
+
+function applySpeechOnsetCorrection(transcript, speechOnsetSeconds) {
+  const words = Array.isArray(transcript?.words) ? transcript.words.map((word) => ({ ...word })) : [];
+  if (!words.length || !Number.isFinite(speechOnsetSeconds) || speechOnsetSeconds < 0.2) {
+    return transcript;
+  }
+
+  const onset = Math.max(0, speechOnsetSeconds);
+  const firstWord = words[0];
+  if (!firstWord || firstWord.start >= onset - 0.12) {
+    return transcript;
+  }
+
+  const earlyWordIndexes = [];
+  for (let index = 0; index < Math.min(6, words.length); index += 1) {
+    if (words[index].start < onset - 0.12) {
+      earlyWordIndexes.push(index);
+    } else {
+      break;
+    }
+  }
+
+  if (earlyWordIndexes.length >= 2) {
+    const delta = onset - firstWord.start;
+    words.forEach((word) => {
+      word.start = Math.max(0, word.start + delta);
+      word.end = Math.max(word.start + MIN_CAPTION_DURATION_SECONDS, word.end + delta);
+    });
+  } else {
+    const nextWord = words[1] || null;
+    const maxStart = nextWord ? Math.max(onset, nextWord.start - 0.12) : onset;
+    const originalDuration = Math.max(MIN_CAPTION_DURATION_SECONDS, firstWord.end - firstWord.start);
+    firstWord.start = maxStart;
+    firstWord.end = Math.max(firstWord.start + MIN_CAPTION_DURATION_SECONDS, Math.min(firstWord.start + originalDuration, nextWord ? nextWord.start - 0.02 : Infinity));
+  }
+
+  return {
+    ...transcript,
+    text: transcript?.text || words.map((word) => word.text).join(" "),
+    words,
+  };
+}
+
+function repairInflatedWordTimings(words) {
+  const repaired = words.map((word) => ({ ...word }));
+
+  for (let index = 0; index < repaired.length; index += 1) {
+    const previousWord = repaired[index - 1] || null;
+    const word = repaired[index];
+    const nextWord = repaired[index + 1] || null;
+    if (!word) continue;
+
+    const estimatedDuration = estimateCaptionWordDuration(word.text);
+    const duration = word.end - word.start;
+    const originalStart = word.start;
+    const nextStartsAtEnd = nextWord ? Math.abs(nextWord.start - word.end) <= 0.08 : false;
+    const hasInflatedLeadingSilence = duration >= Math.max(0.7, estimatedDuration * 3.5);
+    const previousDuration = previousWord ? previousWord.end - previousWord.start : Infinity;
+    const previousSharesOriginalStart = previousWord ? Math.abs(previousWord.end - originalStart) <= 0.08 : false;
+    const previousIsBridgeWord = previousWord
+      ? previousDuration <= 0.1 && estimateCaptionWordDuration(previousWord.text) <= 0.32
+      : false;
+
+    if (hasInflatedLeadingSilence && nextStartsAtEnd && previousIsBridgeWord && previousSharesOriginalStart) {
+      const previousEstimatedDuration = estimateCaptionWordDuration(previousWord.text);
+      const combinedStart = Math.max(
+        repaired[index - 2]?.end ?? 0,
+        word.end - (estimatedDuration + previousEstimatedDuration),
+      );
+      previousWord.start = combinedStart;
+      previousWord.end = Math.max(previousWord.start + MIN_CAPTION_DURATION_SECONDS, word.end - estimatedDuration);
+      word.start = Math.max(previousWord.end, word.end - estimatedDuration);
+    } else if (hasInflatedLeadingSilence && nextStartsAtEnd) {
+      word.start = Math.max(previousWord?.end ?? 0, word.end - estimatedDuration);
+    }
+
+    word.end = Math.max(word.start + MIN_CAPTION_DURATION_SECONDS, word.end);
+  }
+
+  return repaired;
+}
+
+function detectSpeechOnset(audio, sampleRate) {
+  if (!(audio instanceof Float32Array) || !audio.length || !Number.isFinite(sampleRate) || sampleRate <= 0) {
+    return 0;
+  }
+
+  const frameSize = Math.max(128, Math.round(sampleRate * 0.02));
+  const hopSize = Math.max(64, Math.round(frameSize / 2));
+  const baselineFrames = [];
+
+  for (let start = 0; start + frameSize <= Math.min(audio.length, sampleRate); start += hopSize) {
+    baselineFrames.push(computeFrameRms(audio, start, frameSize));
+  }
+
+  const sortedBaseline = [...baselineFrames].sort((a, b) => a - b);
+  const baseline = sortedBaseline.length ? sortedBaseline[Math.floor(sortedBaseline.length * 0.5)] : 0;
+  const threshold = Math.max(0.01, baseline * 4.5);
+  let consecutive = 0;
+
+  for (let start = 0; start + frameSize <= audio.length; start += hopSize) {
+    const rms = computeFrameRms(audio, start, frameSize);
+    if (rms >= threshold) {
+      consecutive += 1;
+      if (consecutive >= 3) {
+        return Math.max(0, (start - hopSize * 2) / sampleRate);
+      }
+    } else {
+      consecutive = 0;
+    }
+  }
+
+  return 0;
+}
+
+function computeFrameRms(audio, start, frameSize) {
+  let energy = 0;
+  for (let index = start; index < start + frameSize; index += 1) {
+    const sample = audio[index] || 0;
+    energy += sample * sample;
+  }
+  return Math.sqrt(energy / frameSize);
+}
+
+function estimateCaptionWordDuration(text = "") {
+  const normalizedLength = String(text).replace(/\s+/g, "").length;
+  return Math.max(0.18, Math.min(0.52, 0.14 + normalizedLength * 0.03));
+}
+
+function stripNonDialogueText(text) {
+  return String(text)
+    .replace(/\[[^\]]*(?:music|applause|laughter|laughs|laughing|cheering|silence|inaudible|crosstalk)[^\]]*\]/gi, "")
+    .replace(/\([^)]*(?:music|applause|laughter|laughs|laughing|cheering|silence|inaudible|crosstalk)[^)]*\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function createCaptionRenderJob({ silent = false, token = state.captionAnalysisToken } = {}) {
+  const video = state.captionVideo;
+  if (!video) return null;
+  if (!silent) setCaptionProgress(90, "Detecting cuts");
+  if (!silent) setCaptionStatus("Detecting video cuts for caption timing...");
+  const formData = new FormData();
+  formData.append("video", video);
+  formData.append("settings", JSON.stringify(getCaptionSettingsWithGeometry()));
+
+  const response = await fetch("/api/captions/create-job", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error || `Could not prepare render job with ${response.status}.`);
+  }
+  if (token !== state.captionAnalysisToken || video !== state.captionVideo) return null;
+  state.captionCutPoints = state.captionCutPoints.length ? state.captionCutPoints : payload.cut_points || [];
+  state.captionJobId = payload.job_id || state.captionJobId;
+  state.captionVideoGeometry = payload.metadata || state.captionVideoGeometry;
+  return payload.job_id;
+}
+
+async function prepareCaptionCutPoints(options = {}) {
+  if (!state.captionVideo || state.captionCutPoints.length) return;
+  try {
+    await createCaptionRenderJob(options);
+  } catch (error) {
+    state.captionCutPoints = [];
+    console.warn("Caption cut detection failed.", error);
+  }
+}
+
+async function getCaptionVideoMetadata() {
+  if (state.captionVideoGeometry?.width && state.captionVideoGeometry?.height) {
+    return state.captionVideoGeometry;
+  }
+
+  return await new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    const url = URL.createObjectURL(state.captionVideo);
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const metadata = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        duration: video.duration || 0,
+        fps: 30,
+      };
+      URL.revokeObjectURL(url);
+      resolve(metadata);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read video metadata."));
+    };
+    video.src = url;
+  });
+}
+
+function waitForVideoMetadata(video) {
+  if (video.readyState >= 1) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    video.onloadedmetadata = resolve;
+    video.onerror = () => reject(new Error("Could not load video for cut detection."));
+  });
+}
+
+function waitForVideoData(video) {
+  if (video.readyState >= 2) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const handleLoadedData = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("Could not load the first video frame."));
+    };
+    const cleanup = () => {
+      video.removeEventListener("loadeddata", handleLoadedData);
+      video.removeEventListener("canplay", handleLoadedData);
+      video.removeEventListener("error", handleError);
+    };
+    video.addEventListener("loadeddata", handleLoadedData, { once: true });
+    video.addEventListener("canplay", handleLoadedData, { once: true });
+    video.addEventListener("error", handleError, { once: true });
+    video.load();
+  });
+}
+
+function seekVideo(video, time) {
+  return new Promise((resolve, reject) => {
+    const targetTime = Math.max(0, time);
+    if (Math.abs(video.currentTime - targetTime) < 0.001 && video.readyState >= 2) {
+      resolve();
+      return;
+    }
+    const handleSeeked = () => {
+      video.removeEventListener("seeked", handleSeeked);
+      resolve();
+    };
+    video.addEventListener("seeked", handleSeeked, { once: true });
+    video.onerror = () => reject(new Error("Could not seek video for cut detection."));
+    video.currentTime = targetTime;
+  });
+}
+
+async function renderCaptionedVideo() {
+  if (!state.captionVideo || state.captions.length === 0) {
+    setCaptionStatus("Transcribe a video before exporting.");
+    return;
+  }
+
+  remapEditorToTimedCaptions();
+  setCaptionBusy(true);
+  setCaptionProgress(0, "Rendering captioned video");
+  setCaptionStatus("");
+
+  try {
+    const blob = await renderCaptionedVideoWithCanvas();
+    downloadBlob(blob, "video-wizard-captions.mp4");
+    setCaptionProgress(100, "Captioned video exported");
+    setCaptionStatus("Captioned video exported.");
+  } catch (error) {
+    setCaptionStatus(normalizeError(error));
+  } finally {
+    setCaptionBusy(false);
+  }
+}
+
+async function renderCaptionedVideoWithCanvas() {
+  const FRAME_PHASE_END = 82;
+  const ENCODE_PHASE_END = 91;
+  const MUX_PHASE_END = 97;
+  const FINALIZE_PHASE_END = 99;
+  const sourceVideo = document.createElement("video");
+  sourceVideo.src = state.captionVideoUrl;
+  sourceVideo.muted = true;
+  sourceVideo.playsInline = true;
+  sourceVideo.preload = "auto";
+  await waitForVideoMetadata(sourceVideo);
+  await ensureCaptionFontReady();
+
+  const crop = getExportCaptionCrop(sourceVideo);
+  const frameSize = getNormalizedCaptionFrameSize(crop);
+  const width = makeEven(frameSize.width);
+  const height = makeEven(frameSize.height);
+  const duration = sourceVideo.duration || state.captionVideoGeometry?.duration || 0;
+  const fps = Math.min(30, Math.max(15, Math.round(state.captionVideoGeometry?.fps || 24)));
+  const totalFrames = Math.max(1, Math.ceil(duration * fps));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  await loadFFmpeg();
+  await cleanWorkspace();
+  const sourceName = `caption_source.${extensionFromName(state.captionVideo.name, "mp4")}`;
+  const framePrefix = "caption_frame";
+  const visualName = "caption_visual.mp4";
+  const outputName = "caption_output.mp4";
+  await ffmpeg.writeFile(sourceName, await fetchFile(state.captionVideo));
+
+  for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+    const time = Math.min(duration, frameIndex / fps);
+    await seekVideo(sourceVideo, time);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(sourceVideo, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
+    drawCaptionOnCanvas(ctx, getCaptionAtTime(time), width, height);
+    const frameName = `${framePrefix}_${String(frameIndex).padStart(6, "0")}.jpg`;
+    const blob = await canvasToBlob(canvas, 0.92);
+    await ffmpeg.writeFile(frameName, await fetchFile(blob));
+    if (frameIndex % Math.max(1, Math.round(fps)) === 0) {
+      els.progressBar.value = frameIndex / totalFrames;
+      const framePercent = Math.round((frameIndex / totalFrames) * FRAME_PHASE_END);
+      setCaptionProgress(
+        framePercent,
+        `Rendering frames ${frameIndex + 1} of ${totalFrames}`,
+      );
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+  }
+
+  setCaptionProgress(ENCODE_PHASE_END - 4, "Encoding caption video");
+  await ffmpeg.exec([
+    "-framerate",
+    String(fps),
+    "-start_number",
+    "0",
+    "-i",
+    `${framePrefix}_%06d.jpg`,
+    "-frames:v",
+    String(totalFrames),
+    "-an",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "18",
+    "-pix_fmt",
+    "yuv420p",
+    "-movflags",
+    "+faststart",
+    visualName,
+  ]);
+
+  setCaptionProgress(MUX_PHASE_END - 2, "Adding original audio");
+  await ffmpeg.exec([
+    "-i",
+    visualName,
+    "-i",
+    sourceName,
+    "-map",
+    "0:v",
+    "-map",
+    "1:a?",
+    "-shortest",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    outputName,
+  ]);
+
+  setCaptionProgress(FINALIZE_PHASE_END, "Finalizing export file");
+  const data = await ffmpeg.readFile(outputName);
+  return new Blob([data], { type: "video/mp4" });
+}
+
+function drawCaptionOnCanvas(ctx, caption, width, height) {
+  if (!caption?.text) return;
+  const lines = caption.text.split("\n").filter(Boolean);
+  if (!lines.length) return;
+  const settings = getCaptionSettings();
+  const positionGeometry = getCaptionPositionGeometry();
+  const frameScale = getCaptionFrameScale(width, height);
+  const fontSize = Math.max(1, Math.round(settings.fontSize * frameScale));
+  const tracking = Number(settings.tracking || 0) * frameScale;
+  const lineHeight = fontSize * 1.1 + getCaptionFontRelativeSpacing(settings.leading, fontSize);
+  const centerX = width * (Number(settings.positionX ?? (positionGeometry.width / 2)) / positionGeometry.width);
+  const centerY = height * (Number(settings.positionY ?? (positionGeometry.height * 0.85)) / positionGeometry.height);
+  const yStart = centerY - (lineHeight * (lines.length - 1)) / 2;
+  const paragraphAlign = settings.paragraphAlign || "center";
+
+  ctx.save();
+  ctx.font = `600 ${fontSize}px ${quoteFontFamily(normalizeCaptionFontFamily(settings.font))}, sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  const fontMetrics = measureCaptionFontMetrics(ctx, fontSize);
+  const textMetrics = lines.map((line) => measureCaptionLine(ctx, line, tracking, fontSize));
+  const textLayout = getCaptionTextLayout(lines, textMetrics, centerX, paragraphAlign);
+  const lineYs = textLayout.map((_, index) => yStart + index * lineHeight);
+  const textYs = getCaptionTextDrawYs(fontMetrics, lineYs, settings);
+  drawCaptionTextBoxes(ctx, textLayout, textMetrics, fontMetrics, lineYs, textYs, yStart, lineHeight, fontSize, frameScale, settings);
+  if (settings.dropShadow > 0) {
+    const shadow = getDropShadowProfile(settings.dropShadow, frameScale);
+    ctx.shadowColor = colorWithAlpha(settings.dropShadowColor || "#000000", shadow.alpha);
+    ctx.shadowBlur = shadow.blur;
+    ctx.shadowOffsetX = shadow.offsetX;
+    ctx.shadowOffsetY = shadow.offsetY;
+  }
+  ctx.strokeStyle = settings.strokeColor || "#000";
+  ctx.lineWidth = Math.max(0, Math.round(settings.strokeSize * frameScale));
+  ctx.fillStyle = settings.color || "#fff";
+  textLayout.forEach((layout, index) => drawTrackedText(ctx, layout, textYs[index], tracking));
+  ctx.restore();
+}
+
+function measureTrackedText(ctx, text, tracking = 0) {
+  const chars = Array.from(String(text));
+  if (!chars.length) return 0;
+  return chars.reduce((width, char) => width + ctx.measureText(char).width, 0) + tracking * Math.max(0, chars.length - 1);
+}
+
+function measureCaptionLine(ctx, text, tracking, fontSize) {
+  const metrics = ctx.measureText(text);
+  return {
+    width: measureTrackedText(ctx, text, tracking),
+    ascent: Math.max(1, metrics.actualBoundingBoxAscent || fontSize * 0.58),
+    descent: Math.max(1, metrics.actualBoundingBoxDescent || fontSize * 0.42),
+  };
+}
+
+function measureCaptionFontMetrics(ctx, fontSize) {
+  const metrics = ctx.measureText("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789gjpqy");
+  const ascent = Math.max(1, metrics.actualBoundingBoxAscent || metrics.fontBoundingBoxAscent || fontSize * 0.72);
+  const descent = Math.max(1, metrics.actualBoundingBoxDescent || metrics.fontBoundingBoxDescent || fontSize * 0.28);
+  return {
+    ascent,
+    descent,
+    height: ascent + descent,
+  };
+}
+
+function quoteFontFamily(fontFamily) {
+  return `"${String(fontFamily || DEFAULT_CAPTION_FONT).replace(/"/g, '\\"')}"`;
+}
+
+function drawTrackedText(ctx, layout, y, tracking = 0) {
+  const chars = Array.from(String(layout.text));
+  if (!chars.length) return;
+  let x = layout.x;
+  ctx.save();
+  ctx.textAlign = "left";
+  chars.forEach((char) => {
+    if (ctx.lineWidth > 0) ctx.strokeText(char, x, y);
+    ctx.fillText(char, x, y);
+    x += ctx.measureText(char).width + tracking;
+  });
+  ctx.restore();
+}
+
+function getCaptionFrameScale(width, height) {
+  return Math.min(width / 1080, height / 1920);
+}
+
+function getCaptionFontRelativeSpacing(value, fontSize) {
+  return (Number(value) || 0) * (Math.max(1, fontSize) / CAPTION_SPACING_REFERENCE_FONT_SIZE);
+}
+
+function getCaptionSpacingControlValue(pixelValue, fontSize) {
+  return (Number(pixelValue) || 0) * (CAPTION_SPACING_REFERENCE_FONT_SIZE / Math.max(1, fontSize));
+}
+
+function getDropShadowProfile(intensity, frameScale) {
+  const level = Math.max(0, Math.min(10, Number(intensity) || 0));
+  const progress = level / 10;
+  const alpha = level <= 0 ? 0 : 0.2 + progress * 0.7;
+  const blur = 1.5 + progress * 3.5;
+  const offsetY = 0.8 + progress * 2.2;
+  const offsetX = progress * 0.6;
+  return {
+    alpha,
+    blur: blur * frameScale,
+    offsetX: offsetX * frameScale,
+    offsetY: offsetY * frameScale,
+  };
+}
+
+function colorWithAlpha(color, alpha) {
+  const hex = String(color || "#000000").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return `rgba(0, 0, 0, ${alpha})`;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getCaptionTextDrawYs(fontMetrics, lineYs, settings) {
+  if (settings.textBox !== "line") return lineYs;
+  const fontCenterOffset = (fontMetrics.ascent - fontMetrics.descent) / 2;
+  return lineYs.map((y) => y + fontCenterOffset);
+}
+
+function drawCaptionTextBoxes(ctx, textLayout, textMetrics, fontMetrics, lineYs, textYs, yStart, lineHeight, fontSize, frameScale, settings) {
+  if (settings.textBox === "none") return;
+  const boxPadding = Math.max(0, getCaptionFontRelativeSpacing(settings.textBoxPadding ?? 30, fontSize));
+  const paddingX = boxPadding;
+  const paddingY = boxPadding;
+  const radius = getCaptionBoxRadius(fontSize, settings);
+  ctx.save();
+  const boxOpacity = clampNumber(Number(settings.textBoxOpacity ?? 100) / 100, 0, 1);
+  ctx.fillStyle = colorWithAlpha(settings.textBoxColor || "#000000", boxOpacity);
+
+  if (settings.textBox === "whole") {
+    const minX = Math.min(...textLayout.map((layout) => layout.x));
+    const maxX = Math.max(...textLayout.map((layout) => layout.x + layout.width));
+    const lineBounds = textMetrics.map((metric, index) => {
+      const y = yStart + index * lineHeight;
+      return {
+        top: y - metric.ascent,
+        bottom: y + metric.descent,
+      };
+    });
+    const minY = Math.min(...lineBounds.map((bound) => bound.top));
+    const maxY = Math.max(...lineBounds.map((bound) => bound.bottom));
+    const boxWidth = maxX - minX + paddingX * 2;
+    const boxHeight = maxY - minY + paddingY * 2;
+    drawRoundedRect(ctx, minX - paddingX, minY - paddingY, boxWidth, boxHeight, radius);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  const lineBoxHeight = fontMetrics.height + paddingY * 2;
+  const rects = textLayout.map((layout, index) => {
+    const y = lineYs[index];
+    return {
+      x: layout.x - paddingX,
+      y: y - lineBoxHeight / 2,
+      width: layout.width + paddingX * 2,
+      height: lineBoxHeight,
+    };
+  });
+  drawConnectedLineBoxes(ctx, sliceLineRectsAtTransitions(rects), radius);
+  ctx.fill();
+  ctx.restore();
+}
+
+function sliceLineRectsAtTransitions(rects) {
+  const sliced = rects.map((rect) => ({
+    ...rect,
+    bottom: rect.y + rect.height,
+  }));
+  for (let index = 0; index < sliced.length - 1; index += 1) {
+    const current = sliced[index];
+    const next = sliced[index + 1];
+    if (current.bottom <= next.y) continue;
+    const boundary = (current.bottom + next.y) / 2;
+    current.bottom = boundary;
+    current.height = Math.max(1, current.bottom - current.y);
+    next.y = boundary;
+    next.height = Math.max(1, next.bottom - next.y);
+  }
+  return sliced;
+}
+
+function drawConnectedLineBoxes(ctx, rects, radius) {
+  if (!rects.length) return;
+  ctx.beginPath();
+  groupOverlappingLineRects(rects).forEach((group) => {
+    const contour = getLineBoxUnionContour(group);
+    if (contour.length >= 3) {
+      appendRoundedOrthogonalPath(ctx, contour, radius);
+    }
+  });
+}
+
+function groupOverlappingLineRects(rects) {
+  const groups = [];
+  rects
+    .map((rect) => ({
+      ...rect,
+      right: rect.x + rect.width,
+      bottom: rect.y + rect.height,
+    }))
+    .forEach((rect) => {
+      const group = groups.at(-1);
+      const previous = group?.at(-1);
+      if (!previous || rect.y > previous.bottom) {
+        groups.push([rect]);
+      } else {
+        group.push(rect);
+      }
+    });
+  return groups;
+}
+
+function getLineBoxUnionContour(rects) {
+  if (rects.length === 1) {
+    const rect = rects[0];
+    return [
+      { x: rect.x, y: rect.y },
+      { x: rect.right, y: rect.y },
+      { x: rect.right, y: rect.bottom },
+      { x: rect.x, y: rect.bottom },
+    ];
+  }
+
+  const yStops = Array.from(
+    new Set(rects.flatMap((rect) => [rect.y, rect.bottom]).map((value) => value.toFixed(3))),
+    Number,
+  ).sort((a, b) => a - b);
+
+  const bands = [];
+  for (let index = 0; index < yStops.length - 1; index += 1) {
+    const top = yStops[index];
+    const bottom = yStops[index + 1];
+    const covering = rects.filter((rect) => rect.y < bottom && rect.bottom > top);
+    if (!covering.length) continue;
+    bands.push({
+      top,
+      bottom,
+      left: Math.min(...covering.map((rect) => rect.x)),
+      right: Math.max(...covering.map((rect) => rect.right)),
+    });
+  }
+
+  const mergedBands = mergeMatchingBands(bands);
+  if (!mergedBands.length) return [];
+
+  const rightSide = [];
+  for (let index = 0; index < mergedBands.length; index += 1) {
+    const band = mergedBands[index];
+    rightSide.push({ x: band.right, y: band.bottom });
+    const next = mergedBands[index + 1];
+    if (next) rightSide.push({ x: next.right, y: band.bottom });
+  }
+
+  const leftSide = [];
+  for (let index = mergedBands.length - 1; index >= 0; index -= 1) {
+    const band = mergedBands[index];
+    leftSide.push({ x: band.left, y: band.top });
+    const previous = mergedBands[index - 1];
+    if (previous) leftSide.push({ x: previous.left, y: band.top });
+  }
+
+  return cleanContourPoints([
+    { x: mergedBands[0].left, y: mergedBands[0].top },
+    { x: mergedBands[0].right, y: mergedBands[0].top },
+    ...rightSide,
+    { x: mergedBands.at(-1).left, y: mergedBands.at(-1).bottom },
+    ...leftSide,
+  ]);
+}
+
+function mergeMatchingBands(bands) {
+  return bands.reduce((merged, band) => {
+    const previous = merged.at(-1);
+    if (previous && Math.abs(previous.left - band.left) < 0.01 && Math.abs(previous.right - band.right) < 0.01) {
+      previous.bottom = band.bottom;
+    } else {
+      merged.push({ ...band });
+    }
+    return merged;
+  }, []);
+}
+
+function cleanContourPoints(points) {
+  const deduped = points.filter((point, index) => {
+    const previous = points[index - 1];
+    return !previous || Math.abs(point.x - previous.x) > 0.01 || Math.abs(point.y - previous.y) > 0.01;
+  });
+  const first = deduped[0];
+  const last = deduped.at(-1);
+  if (first && last && Math.abs(first.x - last.x) < 0.01 && Math.abs(first.y - last.y) < 0.01) {
+    deduped.pop();
+  }
+  return deduped.filter((point, index) => {
+    const previous = deduped[(index - 1 + deduped.length) % deduped.length];
+    const next = deduped[(index + 1) % deduped.length];
+    return !(
+      (Math.abs(previous.x - point.x) < 0.01 && Math.abs(point.x - next.x) < 0.01) ||
+      (Math.abs(previous.y - point.y) < 0.01 && Math.abs(point.y - next.y) < 0.01)
+    );
+  });
+}
+
+function appendRoundedOrthogonalPath(ctx, points, radius) {
+  if (points.length < 3) return;
+  points.forEach((point, index) => {
+    const previous = points[(index - 1 + points.length) % points.length];
+    const next = points[(index + 1) % points.length];
+    const previousDistance = Math.hypot(point.x - previous.x, point.y - previous.y);
+    const nextDistance = Math.hypot(point.x - next.x, point.y - next.y);
+    if (!previousDistance || !nextDistance) return;
+
+    const safeRadius = Math.min(radius, previousDistance / 2, nextDistance / 2);
+    const start = pointToward(point, previous, safeRadius);
+    const end = pointToward(point, next, safeRadius);
+    if (index === 0) {
+      ctx.moveTo(start.x, start.y);
+    } else {
+      ctx.lineTo(start.x, start.y);
+    }
+    ctx.quadraticCurveTo(point.x, point.y, end.x, end.y);
+  });
+  ctx.closePath();
+}
+
+function pointToward(from, to, distance) {
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+  if (!length) return { ...from };
+  const amount = distance / length;
+  return {
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  };
+}
+
+function getCaptionBoxRadius(fontSize, settings) {
+  const roundness = clampNumber(Number(settings.textBoxRoundness ?? 15), 0, 100);
+  const referenceFontScale = fontSize / Math.max(1, Number(settings.fontSize) || 50);
+  return roundness * referenceFontScale;
+}
+
+function getCaptionTextLayout(lines, metrics, centerX, paragraphAlign) {
+  const maxWidth = Math.max(...metrics.map((metric) => metric.width), 0);
+  return lines.map((line, index) => {
+    const width = metrics[index].width;
+    if (paragraphAlign === "left") {
+      return { text: line, width, x: centerX - maxWidth / 2 };
+    }
+    if (paragraphAlign === "right") {
+      return { text: line, width, x: centerX + maxWidth / 2 - width };
+    }
+    return { text: line, width, x: centerX - width / 2 };
+  });
+}
+
+function appendRoundedRectPath(ctx, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  appendRoundedRectPath(ctx, x, y, width, height, radius);
+}
+
+function makeEven(value) {
+  return Math.max(2, Math.round(value / 2) * 2);
+}
+
+function handleCaptionSettingsChange() {
+  updateCaptionSettingsLabels();
+  if (!state.captionTranscript?.words?.length) return;
+  remapEditorToTimedCaptions();
+  updateCaptionOverlay();
+}
+
+function handleCaptionLayoutChange() {
+  updateCaptionSettingsLabels();
+  if (!state.captionTranscript?.words?.length) return;
+  regenerateCaptionLayoutFromEditor();
+  updateCaptionOverlay();
+}
+
+function handleCaptionStyleChange() {
+  updateCaptionSettingsLabels();
+  ensureCaptionFontReady(els.captionFont.value);
+  updateCaptionOverlay();
+}
+
+function getCaptionSettingsSnapshot() {
+  return {
+    captionFontSize: els.captionFontSize.value,
+    captionParagraphAlign: els.captionParagraphAlign.value,
+    captionColor: els.captionColor.value,
+    captionStrokeEnabled: els.captionStrokeEnabled.checked,
+    captionStroke: els.captionStroke.value,
+    captionStrokeColor: els.captionStrokeColor.value,
+    captionDropShadowEnabled: els.captionDropShadowEnabled.checked,
+    captionDropShadow: els.captionDropShadow.value,
+    captionDropShadowColor: els.captionDropShadowColor.value,
+    captionTracking: els.captionTracking.value,
+    captionLeading: els.captionLeading.value,
+    captionPositionX: els.captionPositionX.value,
+    captionPositionY: els.captionPositionY.value,
+    captionTextBox: els.captionTextBox.value,
+    captionTextBoxColor: els.captionTextBoxColor.value,
+    captionTextBoxOpacity: els.captionTextBoxOpacity.value,
+    captionTextBoxRoundness: els.captionTextBoxRoundness.value,
+    captionTextBoxPadding: els.captionTextBoxPadding.value,
+    captionLength: els.captionLength.value,
+    captionLines: els.captionLines.value,
+  };
+}
+
+function applyCaptionSettingsSnapshot(snapshot) {
+  if (!snapshot) return;
+  const previousSnapshot = getCaptionSettingsSnapshot();
+  state.isRestoringCaptionSettings = true;
+  Object.entries(snapshot).forEach(([key, value]) => {
+    const input = els[key];
+    if (!input) return;
+    if (input.type === "checkbox") {
+      input.checked = Boolean(value);
+    } else {
+      input.value = value;
+    }
+  });
+  setCaptionTextBoxMode(els.captionTextBox.value);
+  setCaptionParagraphAlign(els.captionParagraphAlign.value || "center");
+  updateCaptionSettingsLabels();
+  if (state.captionTranscript?.words?.length) {
+    if (snapshotChangesCaptionLayout(previousSnapshot, snapshot)) {
+      regenerateCaptionLayoutFromEditor();
+    } else {
+      remapEditorToTimedCaptions();
+    }
+  }
+  updateCaptionOverlay();
+  state.isRestoringCaptionSettings = false;
+}
+
+function captureCaptionSettingsSnapshot() {
+  if (state.isRestoringCaptionSettings || state.captionPendingSettingsSnapshot) return;
+  state.captionPendingSettingsSnapshot = getCaptionSettingsSnapshot();
+}
+
+function commitCaptionSettingsSnapshot() {
+  if (state.isRestoringCaptionSettings || !state.captionPendingSettingsSnapshot) return;
+  const before = state.captionPendingSettingsSnapshot;
+  state.captionPendingSettingsSnapshot = null;
+  const after = getCaptionSettingsSnapshot();
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  state.captionSettingsHistory.push(before);
+  if (state.captionSettingsHistory.length > 80) state.captionSettingsHistory.shift();
+}
+
+function undoCaptionSettingsChange() {
+  const snapshot = state.captionSettingsHistory.pop();
+  if (!snapshot) return;
+  state.captionPendingSettingsSnapshot = null;
+  applyCaptionSettingsSnapshot(snapshot);
+}
+
+function shouldHandleCaptionSettingsUndo(target) {
+  if (target === els.captionEditor) return false;
+  return Boolean(target?.closest?.(".caption-settings")) || document.activeElement !== els.captionEditor;
+}
+
+function unlockInlineValueInput(input) {
+  if (input.readOnly) {
+    input.readOnly = false;
+    input.style.userSelect = "text";
+  }
+  selectInlineValueInput(input);
+}
+
+function selectInlineValueInput(input) {
+  window.requestAnimationFrame(() => {
+    input.focus();
+    input.select();
+  });
+}
+
+function handleInlineValueKeydown(event, input, slider) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    commitInlineValueInput(input, slider);
+    input.blur();
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    input.value = formatInlineValueLabel(slider);
+    input.readOnly = true;
+    input.style.userSelect = "";
+    input.blur();
+  }
+}
+
+function commitInlineValueInput(input, slider) {
+  const min = Number(slider.min);
+  const step = Number(slider.step) || 1;
+  const parsedValue = parseInlineValueInput(input, slider);
+  expandControlRangeForValue(slider, parsedValue);
+  const value = clampToStep(parsedValue, min, Number(slider.max), step);
+  slider.value = String(value);
+  input.value = formatInlineValueLabel(slider);
+  input.readOnly = true;
+  input.style.userSelect = "";
+  handleCaptionControlCommit(slider);
+  commitCaptionSettingsSnapshot();
+}
+
+function beginInlineValueDrag(event, input, slider) {
+  if (!input.readOnly) return;
+  event.preventDefault();
+  input.setPointerCapture?.(event.pointerId);
+  state.activeInlineDrag = {
+    pointerId: event.pointerId,
+    input,
+    slider,
+    startX: event.clientX,
+    startValue: Number(slider.value),
+    dragging: false,
+  };
+}
+
+function handleInlineValueDragMove(event) {
+  const drag = state.activeInlineDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const deltaX = event.clientX - drag.startX;
+  if (!drag.dragging && Math.abs(deltaX) < 2) return;
+  drag.dragging = true;
+  const step = Number(drag.slider.step) || 1;
+  const isPositionValue = drag.slider === els.captionPositionX || drag.slider === els.captionPositionY;
+  const dragSpeed = isPositionValue
+    ? (event.shiftKey ? 24 : 6)
+    : (event.shiftKey ? 8 : 2);
+  const nextValue = clampToStep(
+    drag.startValue + Math.round((deltaX * dragSpeed) / 8) * step,
+    Number(drag.slider.min),
+    Number(drag.slider.max),
+    step,
+  );
+  expandControlRangeForValue(drag.slider, nextValue);
+  drag.slider.value = String(nextValue);
+  drag.input.value = formatInlineValueLabel(drag.slider);
+  handleCaptionControlCommit(drag.slider);
+}
+
+function endInlineValueDrag(event) {
+  const drag = state.activeInlineDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  if (drag.dragging) {
+    drag.input.dataset.dragged = "true";
+    commitCaptionSettingsSnapshot();
+  }
+  drag.input.releasePointerCapture?.(event.pointerId);
+  state.activeInlineDrag = null;
+}
+
+function handleInlineValueClick(event, input) {
+  if (input.dataset.dragged === "true") {
+    delete input.dataset.dragged;
+    event.preventDefault();
+    return;
+  }
+  unlockInlineValueInput(input);
+}
+
+function clampToStep(value, min, max, step) {
+  const fallback = Number.isFinite(min) ? min : 0;
+  const bounded = Math.min(max, Math.max(min, Number.isFinite(value) ? value : fallback));
+  return Math.round(bounded / step) * step;
+}
+
+function expandControlRangeForValue(control, value) {
+  if (![els.captionLeading, els.captionTextBoxPadding].includes(control)) return;
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return;
+  const max = Number(control.max);
+  if (Number.isFinite(max) && numericValue >= max) {
+    control.max = String(Math.ceil(numericValue + 1000));
+  }
+  const linkedValueInput = control === els.captionLeading ? els.captionLeadingValue : els.captionTextBoxPaddingValue;
+  if (linkedValueInput) linkedValueInput.max = control.max;
+}
+
+function parseInlineValueInput(input, slider) {
+  if (slider === els.captionLength && /^one\b/i.test(String(input.value).trim())) {
+    return Number(slider.min);
+  }
+  const numericValue = Number(input.value);
+  return Number.isFinite(numericValue) ? numericValue : Number(slider.value);
+}
+
+function formatInlineValueLabel(slider) {
+  if (slider === els.captionLength && isOneWordCaptionLength(slider.value)) {
+    return "One word";
+  }
+  return String(slider.value);
+}
+
+function handleCaptionControlCommit(control) {
+  if ([els.captionLength, els.captionLines].includes(control)) {
+    handleCaptionLayoutChange();
+    return;
+  }
+  handleCaptionStyleChange();
+}
+
+function handleCaptionEditorInput() {
+  window.clearTimeout(state.captionEditDebounce);
+  state.captionEditDebounce = window.setTimeout(() => {
+    const changedIndex = remapEditorToTimedCaptions();
+    seekPreviewToCaption(getCaptionIndexAtEditorCursor(changedIndex));
+    updateCaptionOverlay();
+  }, 180);
+}
+
+function handleCaptionCursorActivity() {
+  seekPreviewToCaption(getCaptionIndexAtEditorCursor());
+  updateCaptionOverlay();
+}
+
+function updateCaptionOverlay() {
+  drawCaptionPreviewFrame();
+  updateCaptionPreviewControls();
+  if (!els.captionPreviewVideo.paused) {
+    window.cancelAnimationFrame(state.captionPreviewAnimation);
+    state.captionPreviewAnimation = window.requestAnimationFrame(updateCaptionOverlay);
+  }
+}
+
+function ensureCaptionFontReady(fontFamily = els.captionFont?.value) {
+  const family = normalizeCaptionFontFamily(fontFamily);
+  if (!document.fonts?.load) return Promise.resolve();
+  if (state.captionLoadedFonts.has(family)) return Promise.resolve();
+  if (!state.captionFontReadyPromises.has(family)) {
+    const promise = loadCaptionFont(family)
+      .then((didLoad) => {
+        if (didLoad) state.captionLoadedFonts.add(family);
+        if (!didLoad) state.captionFontReadyPromises.delete(family);
+        state.captionFontReady = state.captionLoadedFonts.size >= CAPTION_FONT_FAMILIES.size;
+        updateCaptionOverlay();
+      })
+      .catch((error) => {
+        state.captionFontReadyPromises.delete(family);
+        console.warn(`Caption font "${family}" failed to load.`, error);
+      });
+    state.captionFontReadyPromises.set(family, promise);
+    if (!state.captionFontReadyPromise) state.captionFontReadyPromise = promise;
+  }
+  return state.captionFontReadyPromises.get(family);
+}
+
+async function loadCaptionFont(fontFamily = DEFAULT_CAPTION_FONT) {
+  if (!document.fonts?.load) return;
+  const family = normalizeCaptionFontFamily(fontFamily);
+  const fontSpec = `600 72px ${quoteFontFamily(family)}`;
+  try {
+    await document.fonts.load(fontSpec);
+    await document.fonts.ready;
+    if (!document.fonts.check(fontSpec)) {
+      throw new Error(`${family} did not pass the browser font check.`);
+    }
+    return true;
+  } catch (error) {
+    console.warn(`Caption font "${family}" could not be loaded before preview draw.`, error);
+    return false;
+  }
+}
+
+function normalizeCaptionFontFamily(fontFamily) {
+  const family = String(fontFamily || DEFAULT_CAPTION_FONT).trim();
+  return CAPTION_FONT_FAMILIES.has(family) ? family : DEFAULT_CAPTION_FONT;
+}
+
+function isCaptionFontLoaded(fontFamily = els.captionFont?.value) {
+  return !document.fonts?.load || state.captionLoadedFonts.has(normalizeCaptionFontFamily(fontFamily));
+}
+
+function toggleCaptionPreviewPlayback() {
+  const video = els.captionPreviewVideo;
+  if (!state.captionVideoUrl || !Number.isFinite(video.duration)) return;
+  if (video.paused) {
+    video.play().catch(() => undefined);
+  } else {
+    video.pause();
+  }
+  updateCaptionPreviewControls();
+}
+
+function handleCaptionPreviewClick() {
+  els.captionPreviewFrame.focus();
+  toggleCaptionPreviewPlayback();
+}
+
+function handleCaptionEditorKeydown(event) {
+  if (!event.shiftKey || event.code !== "Space" || event.isComposing) return;
+  event.preventDefault();
+  toggleCaptionPreviewPlayback();
+}
+
+function handleCaptionPreviewKeydown(event) {
+  if (event.code === "Space") {
+    event.preventDefault();
+    toggleCaptionPreviewPlayback();
+    return;
+  }
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  stepCaptionPreviewFrame(event.key === "ArrowRight" ? 1 : -1);
+}
+
+function stepCaptionPreviewFrame(direction) {
+  const video = els.captionPreviewVideo;
+  if (!state.captionVideoUrl || !Number.isFinite(video.duration)) return;
+  video.pause();
+  const fps = Number(state.captionVideoGeometry?.fps) || 30;
+  const frameDuration = 1 / fps;
+  video.currentTime = Math.min(video.duration, Math.max(0, video.currentTime + direction * frameDuration));
+  updateCaptionOverlay();
+}
+
+function handleCaptionPreviewSeek() {
+  const video = els.captionPreviewVideo;
+  if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+  video.currentTime = (Number(els.captionPreviewSeek.value) / 1000) * video.duration;
+  updateCaptionOverlay();
+}
+
+function updateCaptionPreviewControls() {
+  const video = els.captionPreviewVideo;
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+  const hasVideo = Boolean(state.captionVideoUrl && duration > 0);
+  els.captionPreviewPlay.disabled = !hasVideo;
+  els.captionPreviewSeek.disabled = !hasVideo;
+  els.captionPreviewPlay.textContent = !video.paused && hasVideo ? "Pause" : "Play";
+  els.captionPreviewTime.textContent = `${formatMediaTime(currentTime)} / ${formatMediaTime(duration)}`;
+  if (hasVideo && !els.captionPreviewSeek.matches(":active")) {
+    els.captionPreviewSeek.value = String(Math.round((currentTime / duration) * 1000));
+  } else if (!hasVideo) {
+    els.captionPreviewSeek.value = "0";
+  }
+}
+
+function getCaptionAtTime(time) {
+  return state.captions.find((caption) => time >= caption.start && time < caption.end);
+}
+
+function commitCaptionEditorChanges() {
+  remapEditorToTimedCaptions();
+}
+
+function remapEditorToTimedCaptions() {
+  if (!state.captionSourceWords.length) return -1;
+  const previous = state.captions.map((caption) => caption.text).join("\n\n");
+  const editorBlocks = parseCaptionEditorBlocks(els.captionEditor.value);
+  const editedWords = createEditedTimedWords(
+    editorBlocks.map((block) => block.text).join(" "),
+    state.captionSourceWords,
+  );
+  state.captionTranscript = {
+    text: editedWords.map((word) => word.text).join(" "),
+    words: editedWords,
+  };
+  state.captions = buildCaptionsFromEditorBlocks(editorBlocks, editedWords, state.captionCutPoints, getCaptionSettingsWithGeometry());
+  updateCaptionActionAvailability();
+  return findChangedCaptionIndex(previous, state.captions.map((caption) => caption.text).join("\n\n"));
+}
+
+function regenerateCaptionLayoutFromEditor() {
+  if (!state.captionSourceWords.length) return -1;
+  const previous = state.captions.map((caption) => caption.text).join("\n\n");
+  const editorBlocks = parseCaptionEditorBlocks(els.captionEditor.value);
+  const editedWords = createEditedTimedWords(
+    editorBlocks.map((block) => block.text).join(" "),
+    state.captionSourceWords,
+  );
+  state.captionTranscript = {
+    text: editedWords.map((word) => word.text).join(" "),
+    words: editedWords,
+  };
+  state.captions = buildCaptionsFromWords(editedWords, state.captionCutPoints, getCaptionSettingsWithGeometry());
+  updateCaptionEditorFromCaptions();
+  updateCaptionActionAvailability();
+  return findChangedCaptionIndex(previous, state.captions.map((caption) => caption.text).join("\n\n"));
+}
+
+function snapshotChangesCaptionLayout(before, after) {
+  return before?.captionLength !== after?.captionLength || before?.captionLines !== after?.captionLines;
+}
+
+function parseCaptionEditorBlocks(text) {
+  return String(text)
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((text) => ({
+      text,
+      wordCount: tokenizeCaptionText(text).length,
+    }))
+    .filter((block) => block.wordCount > 0);
+}
+
+function buildCaptionsFromEditorBlocks(blocks, editedWords, cutPoints, settings) {
+  const captions = [];
+  let wordIndex = 0;
+  blocks.forEach((block) => {
+    const blockWords = editedWords.slice(wordIndex, wordIndex + block.wordCount);
+    wordIndex += block.wordCount;
+    if (!blockWords.length) return;
+    const originalStart = blockWords[0].start;
+    const originalEnd = blockWords.at(-1).end;
+    captions.push({
+      id: crypto.randomUUID(),
+      start: Math.max(0, originalStart),
+      end: Math.max(originalStart + MIN_CAPTION_DURATION_SECONDS, originalEnd),
+      originalStart,
+      originalEnd,
+      nudged: false,
+      text: block.text,
+      originalText: block.text,
+      wordIds: blockWords.map((word) => word.id),
+      wordMappings: blockWords.map((word) => ({ wordId: word.id, text: word.text })),
+    });
+  });
+  return applyCaptionTimingRules(captions, cutPoints, settings);
+}
+
+function findChangedCaptionIndex(previousText, nextText) {
+  const previousBlocks = previousText.split(/\n{2,}/);
+  const nextBlocks = nextText.split(/\n{2,}/);
+  const count = Math.max(previousBlocks.length, nextBlocks.length);
+  for (let index = 0; index < count; index += 1) {
+    if ((previousBlocks[index] || "") !== (nextBlocks[index] || "")) return index;
+  }
+  return -1;
+}
+
+function seekPreviewToCaption(index) {
+  if (index < 0 || !state.captions[index]) return;
+  const targetTime = Math.max(0, state.captions[index].start + 0.02);
+  if (Math.abs(els.captionPreviewVideo.currentTime - targetTime) > 0.15) {
+    els.captionPreviewVideo.currentTime = targetTime;
+  }
+}
+
+function getCaptionIndexAtEditorCursor(fallbackIndex = -1) {
+  const cursor = els.captionEditor.selectionStart;
+  if (!Number.isFinite(cursor)) return fallbackIndex;
+  const beforeCursor = els.captionEditor.value.slice(0, cursor);
+  const blockIndex = beforeCursor.split(/\n{2,}/).length - 1;
+  if (state.captions[blockIndex]) return blockIndex;
+  return fallbackIndex;
+}
+
+function drawCaptionPreviewFrame() {
+  const video = els.captionPreviewVideo;
+  const canvas = els.captionPreviewCanvas;
+  const crop = getCaptionPreviewCrop();
+  if (!crop) {
+    clearCaptionPreviewCanvas();
+    return;
+  }
+  if (video.readyState < 2) {
+    return;
+  }
+  const frameSize = getNormalizedCaptionFrameSize(crop);
+  const width = frameSize.width;
+  const height = frameSize.height;
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
+  const selectedFont = els.captionFont.value;
+  if (isCaptionFontLoaded(selectedFont)) {
+    drawCaptionOnCanvas(ctx, getCaptionAtTime(video.currentTime), width, height);
+  } else {
+    ensureCaptionFontReady(selectedFont);
+  }
+  els.captionPreview.classList.add("has-canvas");
+}
+
+function clearCaptionPreviewCanvas() {
+  const canvas = els.captionPreviewCanvas;
+  const ctx = canvas.getContext("2d");
+  ctx?.clearRect(0, 0, canvas.width || 1, canvas.height || 1);
+  els.captionPreview.classList.remove("has-canvas");
+}
+
+function getCaptionPreviewCrop() {
+  const video = els.captionPreviewVideo;
+  const width = video.videoWidth || state.captionVideoGeometry?.width || 0;
+  const height = video.videoHeight || state.captionVideoGeometry?.height || 0;
+  if (!width || !height) return null;
+  const crop = state.captionVisibleCrop;
+  if (!crop) return { x: 0, y: 0, width, height };
+  return {
+    x: Math.max(0, Math.min(width - 2, Math.round(crop.x))),
+    y: Math.max(0, Math.min(height - 2, Math.round(crop.y))),
+    width: Math.max(2, Math.min(width, Math.round(crop.width))),
+    height: Math.max(2, Math.min(height, Math.round(crop.height))),
+  };
+}
+
+function getExportCaptionCrop(video) {
+  const width = video.videoWidth || state.captionVideoGeometry?.width || 0;
+  const height = video.videoHeight || state.captionVideoGeometry?.height || 0;
+  const crop = state.captionVisibleCrop;
+  if (!crop || !width || !height) return { x: 0, y: 0, width, height };
+  return {
+    x: Math.max(0, Math.min(width - 2, Math.round(crop.x))),
+    y: Math.max(0, Math.min(height - 2, Math.round(crop.y))),
+    width: Math.max(2, Math.min(width, Math.round(crop.width))),
+    height: Math.max(2, Math.min(height, Math.round(crop.height))),
+  };
+}
+
+function getNormalizedCaptionFrameSize(crop) {
+  const width = Math.max(2, Number(crop?.width) || 0);
+  const height = Math.max(2, Number(crop?.height) || 0);
+  const aspect = width / height;
+  if (Math.abs(aspect - 9 / 16) < 0.04) return { width: 1080, height: 1920 };
+  if (Math.abs(aspect - 16 / 9) < 0.04) return { width: 1920, height: 1080 };
+  if (Math.abs(aspect - 1) < 0.04) return { width: 1080, height: 1080 };
+  return { width: makeEven(width), height: makeEven(height) };
+}
+
+function createEditedTimedWords(text, sourceWords) {
+  const tokens = tokenizeCaptionText(text);
+  if (!tokens.length) return [];
+  const timingSourceWords = sourceWords
+    .map((word) => ({ ...word, text: stripNonDialogueText(word.text) }))
+    .filter((word) => word.text);
+  if (timingSourceWords.length === 0) {
+    return tokens.map((token, index) => ({
+      id: `e${index + 1}`,
+      text: token,
+      start: index * 0.25,
+      end: index * 0.25 + 0.2,
+    }));
+  }
+
+  if (tokens.length === 1) {
+    return [{
+      id: "e1",
+      text: tokens[0],
+      start: timingSourceWords[0].start,
+      end: timingSourceWords.at(-1).end,
+    }];
+  }
+
+  const sourceIndexes = mapEditedTokensToSourceIndexes(tokens, timingSourceWords);
+  return tokens.map((token, index) => {
+    const sourceIndex = sourceIndexes[index];
+    const sourceWord = timingSourceWords[sourceIndex] || timingSourceWords.at(-1);
+    const nextSourceIndex = sourceIndexes[index + 1];
+    const nextStart = Number.isFinite(nextSourceIndex)
+      ? timingSourceWords[nextSourceIndex]?.start
+      : sourceWord.end;
+    const start = sourceWord.start;
+    const sourceDuration = Math.max(0.05, sourceWord.end - sourceWord.start);
+    return {
+      id: `e${index + 1}`,
+      text: token,
+      start,
+      end: Math.max(start + 0.05, Math.min(nextStart || sourceWord.end, start + sourceDuration)),
+      sourceWordId: sourceWord.id,
+    };
+  });
+}
+
+function mapEditedTokensToSourceIndexes(tokens, sourceWords) {
+  const sourceTokens = sourceWords.map((word) => normalizeTokenForAlignment(word.text));
+  const editedTokens = tokens.map(normalizeTokenForAlignment);
+  if (tokens.length === sourceWords.length) {
+    return tokens.map((_, index) => index);
+  }
+
+  const anchors = findTokenAlignmentAnchors(editedTokens, sourceTokens);
+  const indexes = new Array(tokens.length).fill(null);
+  anchors.forEach(({ editedIndex, sourceIndex }) => {
+    indexes[editedIndex] = sourceIndex;
+  });
+
+  const boundaries = [
+    { editedIndex: -1, sourceIndex: -1 },
+    ...anchors,
+    { editedIndex: tokens.length, sourceIndex: sourceWords.length },
+  ];
+
+  for (let boundaryIndex = 0; boundaryIndex < boundaries.length - 1; boundaryIndex += 1) {
+    const left = boundaries[boundaryIndex];
+    const right = boundaries[boundaryIndex + 1];
+    const editedSpan = right.editedIndex - left.editedIndex;
+    const sourceSpan = right.sourceIndex - left.sourceIndex;
+    for (let editedIndex = left.editedIndex + 1; editedIndex < right.editedIndex; editedIndex += 1) {
+      const amount = editedSpan > 0 ? (editedIndex - left.editedIndex) / editedSpan : 0;
+      const sourceIndex = Math.round(left.sourceIndex + amount * sourceSpan);
+      indexes[editedIndex] = Math.max(0, Math.min(sourceWords.length - 1, sourceIndex));
+    }
+  }
+
+  return indexes.map((sourceIndex, index) => {
+    if (Number.isFinite(sourceIndex)) return sourceIndex;
+    return Math.max(0, Math.min(sourceWords.length - 1, index));
+  });
+}
+
+function findTokenAlignmentAnchors(editedTokens, sourceTokens) {
+  const rows = editedTokens.length + 1;
+  const columns = sourceTokens.length + 1;
+  const dp = Array.from({ length: rows }, () => new Array(columns).fill(0));
+  for (let row = editedTokens.length - 1; row >= 0; row -= 1) {
+    for (let column = sourceTokens.length - 1; column >= 0; column -= 1) {
+      dp[row][column] = editedTokens[row] && editedTokens[row] === sourceTokens[column]
+        ? dp[row + 1][column + 1] + 1
+        : Math.max(dp[row + 1][column], dp[row][column + 1]);
+    }
+  }
+
+  const anchors = [];
+  let row = 0;
+  let column = 0;
+  while (row < editedTokens.length && column < sourceTokens.length) {
+    if (editedTokens[row] && editedTokens[row] === sourceTokens[column]) {
+      anchors.push({ editedIndex: row, sourceIndex: column });
+      row += 1;
+      column += 1;
+    } else if (dp[row + 1][column] >= dp[row][column + 1]) {
+      row += 1;
+    } else {
+      column += 1;
+    }
+  }
+  return anchors;
+}
+
+function normalizeTokenForAlignment(token) {
+  return String(token || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}']/gu, "");
+}
+
+function tokenizeCaptionText(text) {
+  return String(text)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+}
+
+function mapEditedCaptionToWords(text, wordIds) {
+  const tokens = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (tokens.length === 0) {
+    return wordIds.map((wordId) => ({ wordId, text: "" }));
+  }
+  return wordIds.map((wordId, index) => ({
+    wordId,
+    text: tokens[Math.min(index, tokens.length - 1)],
+  }));
+}
+
+function updateCaptionEditorFromCaptions() {
+  els.captionEditor.value = state.captions.map((caption) => caption.text).join("\n\n");
+  els.captionEditor.scrollTop = 0;
+}
+
+function buildCaptionsFromWords(words, cutPoints, settings) {
+  const cleanedWords = words
+    .map((word) => ({ ...word, text: stripNonDialogueText(word.text) }))
+    .filter((word) => word.text);
+  if (isOneWordCaptionMode(settings)) {
+    const captions = cleanedWords.map((word) => createCaptionFromWords([word], cutPoints, settings));
+    return applyCaptionTimingRules(captions, cutPoints, settings);
+  }
+
+  const groups = [];
+  let current = [];
+
+  cleanedWords.forEach((word, index) => {
+    const previous = current.at(-1);
+    if (previous && shouldBreakOnPause(previous, word, settings)) {
+      groups.push(current);
+      current = [word];
+      return;
+    }
+
+    const candidate = [...current, word];
+    if (current.length > 0 && shouldStartNewCaption(candidate, current, settings)) {
+      groups.push(current);
+      current = [word];
+      return;
+    }
+    current = candidate;
+
+    const nextWord = cleanedWords[index + 1];
+    if (nextWord && shouldBreakOnPunctuation(current, nextWord, settings)) {
+      groups.push(current);
+      current = [];
+    }
+  });
+
+  if (current.length > 0) {
+    groups.push(current);
+  }
+  const captions = mergeOneWordGroups(groups, settings)
+    .map((group) => createCaptionFromWords(group, cutPoints, settings));
+  return applyCaptionTimingRules(captions, cutPoints, settings);
+}
+
+function mergeOneWordGroups(groups, settings) {
+  if (isOneWordCaptionMode(settings)) return groups;
+
+  const pending = groups.map((group) => [...group]);
+  const merged = [];
+
+  for (let index = 0; index < pending.length; index += 1) {
+    const group = pending[index];
+    if (!group.length) continue;
+    if (group.length === 1) {
+      const nextGroup = pending[index + 1];
+      if (nextGroup?.length && captionCanFit([...group, ...nextGroup], settings)) {
+        pending[index + 1] = [...group, ...nextGroup];
+        continue;
+      }
+      const previousGroup = merged.at(-1);
+      if (previousGroup?.length && captionCanFit([...previousGroup, ...group], settings)) {
+        merged[merged.length - 1] = [...previousGroup, ...group];
+        continue;
+      }
+    }
+    merged.push(group);
+  }
+
+  return merged;
+}
+
+function shouldStartNewCaption(candidateWords, currentWords, settings) {
+  if (!captionCanFit(candidateWords, settings)) return true;
+
+  const currentText = currentWords.map((word) => word.text).join(" ");
+  const candidateText = candidateWords.map((word) => word.text).join(" ");
+  if (hasBreakPunctuation(currentWords.at(-1)?.text) && candidateText.length > settings.captionLength * 0.8) {
+    return true;
+  }
+
+  return currentText.length >= settings.captionLength * settings.captionLines;
+}
+
+function shouldBreakOnPause(previousWord, word, settings) {
+  const pause = Number(word.start) - Number(previousWord.end);
+  return pause >= 0.45;
+}
+
+function shouldBreakOnPunctuation(currentWords, nextWord, settings) {
+  const lastWord = currentWords.at(-1);
+  if (!lastWord || !hasBreakPunctuation(lastWord.text)) return false;
+
+  const currentText = currentWords.map((word) => word.text).join(" ");
+  if (!captionCanFit([...currentWords, nextWord], settings)) return true;
+  if (hasTerminalPunctuation(lastWord.text)) return currentText.length >= 8 || currentWords.length >= 2;
+  return currentText.length >= settings.captionLength * 0.55;
+}
+
+function hasBreakPunctuation(text = "") {
+  return /[.!?;:,\u2026]["')\]]?$/.test(text.trim());
+}
+
+function hasTerminalPunctuation(text = "") {
+  return /[.!?\u2026]["')\]]?$/.test(text.trim());
+}
+
+function createCaptionFromWords(words, cutPoints, settings) {
+  const text = wrapCaptionText(words.map((word) => word.text).join(" "), settings.captionLength, settings.captionLines)
+    .lines.join("\n");
+  const originalStart = words[0].start;
+  const originalEnd = words.at(-1).end;
+  return {
+    id: crypto.randomUUID(),
+    start: Math.max(0, originalStart),
+    end: Math.max(originalStart + MIN_CAPTION_DURATION_SECONDS, originalEnd),
+    originalStart,
+    originalEnd,
+    nudged: false,
+    text,
+    originalText: text,
+    wordIds: words.map((word) => word.id),
+    wordMappings: words.map((word) => ({ wordId: word.id, text: word.text })),
+  };
+}
+
+function applyCaptionTimingRules(captions, cutPoints = [], settings = {}) {
+  const fps = Number(settings.fps) || 30;
+  const snapToleranceSeconds = CAPTION_SNAP_TOLERANCE_FRAMES / fps;
+  const sortedCuts = [...(cutPoints || [])]
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+
+  const timedCaptions = [];
+  captions.forEach((caption) => {
+    const dialogueStart = Number(caption.originalStart ?? caption.start) || 0;
+    const dialogueEnd = Number(caption.originalEnd ?? caption.end) || dialogueStart;
+    const previousCaption = timedCaptions.at(-1);
+    const previousEnd = Number(previousCaption?.end);
+    const previousDialogueEnd = Number(previousCaption?.originalEnd ?? previousEnd);
+    let start = Math.max(0, dialogueStart);
+    let end = Math.max(start + MIN_CAPTION_DURATION_SECONDS, dialogueEnd + CAPTION_HOLD_SECONDS);
+    let nudged = false;
+
+    const snappedStart = findNearestCut(start, sortedCuts, snapToleranceSeconds, {
+      min: dialogueStart,
+      max: start + snapToleranceSeconds,
+    });
+    if (snappedStart !== null) {
+      start = snappedStart;
+      nudged = true;
+    }
+
+    const pinnedEndCut = findFirstCutInRange(
+      dialogueEnd,
+      dialogueEnd + CAPTION_HOLD_SECONDS + CAPTION_CUTPOINT_PIN_SECONDS,
+      sortedCuts,
+    );
+    if (pinnedEndCut !== null) {
+      end = Math.max(start + MIN_CAPTION_DURATION_SECONDS, pinnedEndCut);
+      nudged = true;
+    }
+
+    if (previousCaption && Number.isFinite(previousEnd)) {
+      const overlapOrTouching = previousEnd >= start;
+      const renderedGap = start - previousEnd;
+      const dialogueGap = dialogueStart - previousDialogueEnd;
+      if (overlapOrTouching || renderedGap <= CAPTION_JOIN_GAP_SECONDS || dialogueGap <= CAPTION_JOIN_GAP_SECONDS) {
+        previousCaption.end = Math.max(previousCaption.start + MIN_CAPTION_DURATION_SECONDS, start);
+        previousCaption.nudged = true;
+      }
+    }
+
+    start = Math.max(dialogueStart, start);
+    end = Math.max(start + MIN_CAPTION_DURATION_SECONDS, end);
+
+    timedCaptions.push({
+      ...caption,
+      start,
+      end,
+      nudged: Boolean(caption.nudged || nudged),
+    });
+  });
+  return timedCaptions;
+}
+
+function findNearestCut(time, cutPoints, tolerance, bounds = {}) {
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const cutPoint of cutPoints) {
+    if (Number.isFinite(bounds.min) && cutPoint < bounds.min) continue;
+    if (Number.isFinite(bounds.max) && cutPoint > bounds.max) continue;
+    const distance = Math.abs(cutPoint - time);
+    if (distance <= tolerance && distance < nearestDistance) {
+      nearest = cutPoint;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+function findFirstCutInRange(minTime, maxTime, cutPoints) {
+  for (const cutPoint of cutPoints) {
+    if (cutPoint < minTime) continue;
+    if (cutPoint > maxTime) break;
+    return cutPoint;
+  }
+  return null;
+}
+
+function captionCanFit(words, settings) {
+  if (isOneWordCaptionMode(settings)) return words.length <= 1;
+  const text = words.map((word) => word.text).join(" ");
+  const wrapped = wrapCaptionText(text, settings.captionLength, settings.captionLines);
+  return !wrapped.overflow;
+}
+
+function wrapCaptionText(text, maxChars, maxLines) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { lines: [], overflow: false };
+  if (isOneWordCaptionLength(maxChars)) {
+    return { lines: [words[0]], overflow: words.length > 1 };
+  }
+  if (words.some((word) => word.length > maxChars)) {
+    return { lines: greedyWrapCaptionWords(words, maxChars).slice(0, maxLines), overflow: true };
+  }
+
+  const balanced = findBalancedCaptionLines(words, maxChars, maxLines);
+  if (balanced) return { lines: balanced, overflow: false };
+
+  return { lines: greedyWrapCaptionWords(words, maxChars).slice(0, maxLines), overflow: true };
+}
+
+function findBalancedCaptionLines(words, maxChars, maxLines) {
+  let best = null;
+
+  function visit(startIndex, remainingLines, lines) {
+    if (startIndex >= words.length) {
+      const score = scoreCaptionLines(lines, maxChars, maxLines);
+      if (!best || score < best.score) best = { lines: [...lines], score };
+      return;
+    }
+    if (remainingLines === 0) return;
+
+    for (let endIndex = startIndex + 1; endIndex <= words.length; endIndex += 1) {
+      const line = words.slice(startIndex, endIndex).join(" ");
+      if (line.length > maxChars) break;
+      const wordsLeft = words.length - endIndex;
+      if (wordsLeft > 0 && remainingLines === 1) continue;
+      visit(endIndex, remainingLines - 1, [...lines, line]);
+    }
+  }
+
+  visit(0, maxLines, []);
+  return best?.lines || null;
+}
+
+function scoreCaptionLines(lines, maxChars, maxLines) {
+  const lengths = lines.map((line) => line.length);
+  const maxLength = Math.max(...lengths);
+  const minLength = Math.min(...lengths);
+  const balancePenalty = (maxLength - minLength) * 8;
+  const unusedLinePenalty = (maxLines - lines.length) * 18;
+  const target = Math.min(maxChars, Math.ceil(lengths.reduce((sum, length) => sum + length, 0) / maxLines));
+  const targetPenalty = lengths.reduce((sum, length) => sum + Math.abs(target - length), 0);
+  return balancePenalty + unusedLinePenalty + targetPenalty;
+}
+
+function greedyWrapCaptionWords(words, maxChars) {
+  const lines = [];
+  let currentLine = "";
+  words.forEach((word) => {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (candidate.length <= maxChars) {
+      currentLine = candidate;
+      return;
+    }
+    if (currentLine) lines.push(currentLine);
+    currentLine = word;
+  });
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+function getCaptionSettings() {
+  return {
+    whisperModel: CAPTION_WHISPER_MODEL,
+    font: els.captionFont.value,
+    fontSize: Number(els.captionFontSize.value),
+    paragraphAlign: els.captionParagraphAlign.value,
+    color: els.captionColor.value,
+    strokeColor: els.captionStrokeColor.value,
+    strokeSize: els.captionStrokeEnabled.checked ? Number(els.captionStroke.value) : 0,
+    dropShadow: els.captionDropShadowEnabled.checked ? Number(els.captionDropShadow.value) : 0,
+    dropShadowColor: els.captionDropShadowColor.value,
+    tracking: Number(els.captionTracking.value),
+    leading: Number(els.captionLeading.value),
+    positionX: Number(els.captionPositionX.value),
+    positionY: Number(els.captionPositionY.value),
+    textBox: els.captionTextBox.value,
+    textBoxColor: els.captionTextBoxColor.value,
+    textBoxOpacity: Number(els.captionTextBoxOpacity.value),
+    textBoxRoundness: Number(els.captionTextBoxRoundness.value),
+    textBoxPadding: Number(els.captionTextBoxPadding.value),
+    captionLength: Number(els.captionLength.value),
+    captionLines: Number(els.captionLines.value),
+  };
+}
+
+function getCaptionPositionGeometry() {
+  const display = getCaptionDisplayGeometry(state.captionVideoGeometry);
+  const width = Math.max(1, Math.round(Number(display?.width) || Number(state.captionVideoGeometry?.width) || 1080));
+  const height = Math.max(1, Math.round(Number(display?.height) || Number(state.captionVideoGeometry?.height) || 1920));
+  return { width, height };
+}
+
+function getCaptionWhisperModelLabel() {
+  return CAPTION_WHISPER_MODEL_LABEL;
+}
+
+function getCaptionSettingsWithGeometry() {
+  return {
+    ...getCaptionSettings(),
+    fps: Number(state.captionVideoGeometry?.fps) || 30,
+  };
+}
+
+function isOneWordCaptionMode(settings) {
+  return isOneWordCaptionLength(settings?.captionLength);
+}
+
+function isOneWordCaptionLength(value) {
+  return Number(value) < ONE_WORD_CAPTION_LENGTH_THRESHOLD;
+}
+
+function updateCaptionSettingsLabels() {
+  syncCaptionPositionControls();
+  els.captionFontSizeValue.value = els.captionFontSize.value;
+  els.captionStrokeValue.value = els.captionStroke.value;
+  els.captionDropShadowValue.value = els.captionDropShadow.value;
+  els.captionTrackingValue.value = els.captionTracking.value;
+  els.captionLeadingValue.value = els.captionLeading.value;
+  els.captionPositionXValue.value = els.captionPositionX.value;
+  els.captionPositionYValue.value = els.captionPositionY.value;
+  els.captionTextBoxOpacityValue.value = els.captionTextBoxOpacity.value;
+  els.captionTextBoxRoundnessValue.value = els.captionTextBoxRoundness.value;
+  els.captionTextBoxPaddingValue.value = els.captionTextBoxPadding.value;
+  els.captionLengthValue.value = formatInlineValueLabel(els.captionLength);
+  els.captionLinesValue.value = `${Number(els.captionLines.value)}`;
+}
+
+function createCaptionMeasureContext() {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.font = `600 ${Math.max(1, Number(els.captionFontSize.value) || 50)}px ${quoteFontFamily(normalizeCaptionFontFamily(els.captionFont.value))}, sans-serif`;
+  ctx.textBaseline = "middle";
+  return ctx;
+}
+
+function flashCaptionPaddingControl() {
+  if (!els.captionPaddingControl) return;
+  els.captionPaddingControl.classList.remove("is-flashing");
+  void els.captionPaddingControl.offsetWidth;
+  els.captionPaddingControl.classList.add("is-flashing");
+}
+
+function syncCaptionPositionControls() {
+  const geometry = getCaptionPositionGeometry();
+  els.captionPositionX.min = "0";
+  els.captionPositionX.max = String(geometry.width);
+  els.captionPositionY.min = "0";
+  els.captionPositionY.max = String(geometry.height);
+  els.captionPositionXValue.min = "0";
+  els.captionPositionXValue.max = String(geometry.width);
+  els.captionPositionYValue.min = "0";
+  els.captionPositionYValue.max = String(geometry.height);
+
+  if (!state.captionPositionInitialized) {
+    els.captionPositionX.value = String(Math.round(geometry.width / 2));
+    els.captionPositionY.value = String(Math.round(geometry.height * (geometry.height > geometry.width ? 0.83 : 0.87)));
+    state.captionPositionInitialized = true;
+  }
+
+  els.captionPositionXValue.value = String(Math.round(Number(els.captionPositionX.value)));
+  els.captionPositionYValue.value = String(Math.round(Number(els.captionPositionY.value)));
+}
+
+function setCaptionBusy(isBusy) {
+  updateCaptionActionAvailability(isBusy);
+}
+
+function setCaptionStatus(message) {
+  els.captionStatus.textContent = message;
+}
+
+function setCaptionProgress(percent, label, { visible = true } = {}) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  if (state.captionProgressSmooth) {
+    state.captionProgressSmooth.targetPercent = Math.max(state.captionProgressSmooth.targetPercent, safePercent);
+    state.captionProgressSmooth.label = label || state.captionProgressSmooth.label || "Working";
+    els.captionProgressGroup.hidden = !visible;
+    return;
+  }
+  if (safePercent >= 100) {
+    stopCaptionProgressSmoothing();
+  }
+  els.captionProgressGroup.hidden = !visible;
+  els.captionProgressBar.value = safePercent;
+  els.captionProgressPercent.textContent = `${safePercent}%`;
+  els.captionProgressLabel.textContent = label || "Working";
+}
+
+function resetCaptionProgress() {
+  stopCaptionProgressSmoothing();
+  els.captionProgressGroup.hidden = true;
+  els.captionProgressBar.value = 0;
+  els.captionProgressPercent.textContent = "0%";
+  els.captionProgressLabel.textContent = "Waiting for video";
+}
+
+function startCaptionProgressSmoothing(estimatedMs, label = "Working") {
+  stopCaptionProgressSmoothing();
+  const currentPercent = Number(els.captionProgressBar.value) || 0;
+  state.captionProgressSmooth = {
+    startedAt: performance.now(),
+    estimatedMs: Math.max(12000, Number(estimatedMs) || 30000),
+    displayedPercent: Math.max(0, Math.min(100, Math.round(currentPercent))),
+    targetPercent: Math.max(0, Math.min(100, Math.round(currentPercent))),
+    label,
+  };
+  els.captionProgressGroup.hidden = false;
+  tickCaptionProgressSmoothing();
+  state.captionProgressSmoothTimer = window.setInterval(tickCaptionProgressSmoothing, 90);
+}
+
+function stopCaptionProgressSmoothing() {
+  if (state.captionProgressSmoothTimer) {
+    window.clearInterval(state.captionProgressSmoothTimer);
+    state.captionProgressSmoothTimer = null;
+  }
+  state.captionProgressSmooth = null;
+}
+
+function tickCaptionProgressSmoothing() {
+  const smooth = state.captionProgressSmooth;
+  if (!smooth) return;
+  const elapsed = performance.now() - smooth.startedAt;
+  const timePercent = Math.min(95, (elapsed / smooth.estimatedMs) * 95);
+  const leadLimit = smooth.targetPercent < 35 ? 10 : 35;
+  const desiredPercent = Math.max(smooth.targetPercent, Math.min(95, Math.floor(timePercent), smooth.targetPercent + leadLimit));
+  if (desiredPercent > smooth.displayedPercent) {
+    smooth.displayedPercent += 1;
+  }
+  const visiblePercent = Math.max(0, Math.min(100, Math.round(smooth.displayedPercent)));
+  els.captionProgressGroup.hidden = false;
+  els.captionProgressBar.value = visiblePercent;
+  els.captionProgressPercent.textContent = `${visiblePercent}%`;
+  els.captionProgressLabel.textContent = smooth.label || "Working";
+  if (visiblePercent >= 100 && smooth.targetPercent >= 100) {
+    stopCaptionProgressSmoothing();
+  }
+}
+
+function estimateCaptionAnalysisDuration(metadata) {
+  const durationSeconds = Math.max(1, Number(metadata?.duration) || Number(els.captionPreviewVideo.duration) || 30);
+  const modelIsReady = Boolean(state.captionTranscriber && state.captionTranscriberModel === CAPTION_WHISPER_MODEL);
+  const estimatedModelLoadMs = modelIsReady ? 1200 : 35000;
+  const estimatedAudioPrepMs = Math.min(16000, Math.max(3000, durationSeconds * 140));
+  const deviceMultiplier = navigator.gpu ? 0.65 : 1.45;
+  const estimatedTranscribeMs = Math.max(8000, durationSeconds * 1000 * deviceMultiplier);
+  const estimatedFinishMs = 3500;
+  return estimatedModelLoadMs + estimatedAudioPrepMs + estimatedTranscribeMs + estimatedFinishMs;
+}
+
+function updateCaptionActionAvailability(isBusy = false) {
+  els.renderCaptionsButton.disabled = isBusy || state.captions.length === 0;
+  els.exportSrtButton.disabled = isBusy || state.captions.length === 0;
+  els.exportEdlPngButton.disabled = isBusy || state.captions.length === 0;
+}
+
+function setCaptionDiagnostics(message) {
+  els.captionDiagnostics.textContent = message;
+}
+
+function setCaptionTextBoxMode(value) {
+  els.captionTextBox.value = value;
+  els.captionTextBoxButtons.forEach((button) => {
+    const isActive = button.dataset.captionBoxValue === value;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+  const isDisabled = value === "none";
+  if (els.captionTextBoxDetailRow) {
+    els.captionTextBoxDetailRow.hidden = isDisabled;
+  }
+  els.captionTextBoxDetailRow?.classList.toggle("is-disabled", isDisabled);
+  [els.captionTextBoxColor, els.captionTextBoxOpacity, els.captionTextBoxOpacityValue, els.captionTextBoxRoundness, els.captionTextBoxRoundnessValue, els.captionTextBoxPadding, els.captionTextBoxPaddingValue].forEach((input) => {
+    if (!input) return;
+    input.disabled = isDisabled;
+  });
+}
+
+function setCaptionParagraphAlign(value) {
+  els.captionParagraphAlign.value = value;
+  els.captionParagraphButtons.forEach((button) => {
+    const isActive = button.dataset.captionAlignValue === value;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function exportCaptionSrt() {
+  if (!state.captions.length) {
+    setCaptionStatus("Transcribe a video before exporting SRT.");
+    return;
+  }
+
+  const srt = state.captions
+    .map((caption, index) => {
+      const text = String(caption.text || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .join("\n");
+      return [
+        String(index + 1),
+        `${formatSrtTimestamp(caption.start)} --> ${formatSrtTimestamp(caption.end)}`,
+        text,
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  downloadBlob(new Blob([`${srt}\n`], { type: "application/x-subrip" }), "video-wizard-captions.srt");
+  setCaptionStatus("SRT exported.");
+}
+
+async function exportCaptionEdlPng() {
+  if (!state.captions.length) {
+    setCaptionStatus("Transcribe a video before exporting EDL + PNG.");
+    return;
+  }
+  const width = Math.max(1, Math.round(Number(state.captionVideoGeometry?.width) || 1920));
+  const height = Math.max(1, Math.round(Number(state.captionVideoGeometry?.height) || 1080));
+  const fps = Math.max(1, Math.round(Number(state.captionVideoGeometry?.fps) || 30));
+  const baseName = sanitizeFileStem(state.captionVideo?.name || "video-wizard");
+  const edlLines = [
+    `TITLE: ${baseName.toUpperCase()}_CAPTIONS`,
+    "FCM: NON-DROP FRAME",
+    "",
+  ];
+  const zipFiles = [];
+
+  setCaptionStatus("Preparing EDL + PNG exports...");
+  for (let index = 0; index < state.captions.length; index += 1) {
+    const caption = state.captions[index];
+    const eventId = String(index + 1).padStart(3, "0");
+    const pngName = `${baseName}-caption-${String(index + 1).padStart(3, "0")}.png`;
+    const sourceOut = secondsToTimecode(Math.max(MIN_CAPTION_DURATION_SECONDS, caption.end - caption.start), fps);
+    const recordIn = secondsToTimecode(caption.start, fps);
+    const recordOut = secondsToTimecode(caption.end, fps);
+    edlLines.push(
+      `${eventId}  C${eventId}     V     C        00:00:00:00 ${sourceOut} ${recordIn} ${recordOut}`,
+      `* FROM CLIP NAME: ${pngName}`,
+      `* COMMENT: ${String(caption.text || "").replace(/\n/g, " / ")}`,
+      "",
+    );
+    const pngBlob = await renderCaptionPng(caption, width, height);
+    zipFiles.push({ name: pngName, blob: pngBlob });
+  }
+
+  zipFiles.push({
+    name: `${baseName}-captions.edl`,
+    blob: new Blob([`${edlLines.join("\n")}\n`], { type: "text/plain" }),
+  });
+  const zipBlob = await buildZipBlob(zipFiles);
+  downloadBlob(zipBlob, `${baseName}-captions-package.zip`);
+  setCaptionStatus("EDL + PNG ZIP exported.");
+}
+
+function createTranscriptDiagnostic(transcript, durationSeconds = null) {
+  const words = transcript?.words || [];
+  if (!words.length) return "Transcript diagnostics: 0 words captured.";
+  const first = words[0];
+  const last = words.at(-1);
+  const durationLabel = durationSeconds ? ` of ${formatSeconds(durationSeconds)}` : "";
+  return `Transcript diagnostics: ${words.length} words, ${formatSeconds(first.start)}-${formatSeconds(last.end)}${durationLabel}; first "${first.text}", last "${last.text}".`;
+}
+
+async function handleCaptionPreviewMetadata() {
+  updateCaptionPreviewGeometry();
+  updateCaptionPreviewControls();
+  const videoUrl = state.captionVideoUrl;
+  try {
+    await waitForVideoData(els.captionPreviewVideo);
+    if (videoUrl !== state.captionVideoUrl) return;
+    updateCaptionOverlay();
+    const crop = await detectVisibleVideoCrop(videoUrl, state.captionVideoGeometry);
+    if (videoUrl !== state.captionVideoUrl) return;
+    state.captionVisibleCrop = crop;
+    applyCaptionPreviewGeometry(state.captionVideoGeometry);
+    updateCaptionOverlay();
+  } catch (error) {
+    if (videoUrl !== state.captionVideoUrl) return;
+    state.captionVisibleCrop = null;
+    applyCaptionPreviewGeometry(state.captionVideoGeometry);
+    updateCaptionOverlay();
+  }
+}
+
+function updateCaptionPreviewGeometry() {
+  const width = els.captionPreviewVideo.videoWidth;
+  const height = els.captionPreviewVideo.videoHeight;
+  if (!width || !height) return;
+  state.captionVideoGeometry = { width, height };
+  applyCaptionPreviewGeometry(state.captionVideoGeometry);
+}
+
+function applyCaptionPreviewGeometry(geometry) {
+  const width = Number(geometry?.width);
+  const height = Number(geometry?.height);
+  if (!width || !height) {
+    resetCaptionPreviewGeometry();
+    return;
+  }
+  const display = getCaptionDisplayGeometry({ width, height });
+  els.captionPreviewFrame.style.aspectRatio = `${display.width} / ${display.height}`;
+  els.captionPreview.classList.toggle("is-vertical", display.height > display.width);
+  fitCaptionPreviewToAvailableSpace(display.width, display.height);
+  syncCaptionPositionControls();
+}
+
+function resetCaptionPreviewGeometry() {
+  state.captionVisibleCrop = null;
+  state.captionPositionInitialized = false;
+  els.captionPreviewFrame.style.aspectRatio = "";
+  els.captionPreview.style.removeProperty("--caption-preview-width");
+  els.captionPreview.classList.remove("is-vertical");
+}
+
+function getCaptionDisplayGeometry(geometry = state.captionVideoGeometry) {
+  const width = Number(geometry?.width) || 0;
+  const height = Number(geometry?.height) || 0;
+  if (!width || !height) return { width: 16, height: 9 };
+  const crop = state.captionVisibleCrop;
+  if (!crop) return { width, height };
+  return {
+    width: Math.max(2, Math.round(crop.width)),
+    height: Math.max(2, Math.round(crop.height)),
+  };
+}
+
+function fitCaptionPreviewToAvailableSpace(width, height) {
+  const panel = els.captionPreview.closest(".render-panel");
+  if (!panel) return;
+  const panelRect = panel.getBoundingClientRect();
+  const heading = panel.querySelector("h2");
+  const headingHeight = heading?.getBoundingClientRect().height || 0;
+  const styles = getComputedStyle(panel);
+  const rowGap = parseFloat(styles.rowGap || styles.gap || "0") || 0;
+  const paddingTop = parseFloat(styles.paddingTop || "0") || 0;
+  const paddingBottom = parseFloat(styles.paddingBottom || "0") || 0;
+  const availableHeight = Math.max(160, window.innerHeight - panelRect.top - paddingTop - paddingBottom - headingHeight - rowGap - 24);
+  const availableWidth = Math.max(160, panel.clientWidth - 2 * 0);
+  const aspect = width / height;
+  const widthScale = aspect >= 1.7 ? 1 : aspect >= 1.3 ? 0.88 : aspect >= 1 ? 0.78 : 0.64;
+  const fittedWidth = Math.min(availableWidth * widthScale, availableHeight * aspect);
+  els.captionPreview.style.setProperty("--caption-preview-width", `${Math.max(160, Math.floor(fittedWidth))}px`);
+}
+
+async function detectVisibleVideoCrop(videoUrl, geometry) {
+  if (!videoUrl || !geometry?.width || !geometry?.height) return null;
+  const video = document.createElement("video");
+  video.src = videoUrl;
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  await waitForVideoMetadata(video);
+
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  const sampleTimes = [0.08, 0.4, 1.0, 2.0]
+    .map((time) => Math.min(Math.max(0, duration - 0.05), time))
+    .filter((time, index, list) => duration > 0 && list.indexOf(time) === index);
+  if (!sampleTimes.length) return null;
+
+  const sampleWidth = 180;
+  const sampleHeight = Math.max(2, Math.round(sampleWidth * geometry.height / geometry.width));
+  const canvas = document.createElement("canvas");
+  canvas.width = sampleWidth;
+  canvas.height = sampleHeight;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  let mergedBounds = null;
+
+  for (const time of sampleTimes) {
+    await seekVideo(video, time);
+    ctx.drawImage(video, 0, 0, sampleWidth, sampleHeight);
+    const bounds = findVisiblePixelBounds(ctx.getImageData(0, 0, sampleWidth, sampleHeight), sampleWidth, sampleHeight);
+    if (!bounds) continue;
+    mergedBounds = mergedBounds
+      ? {
+          left: Math.min(mergedBounds.left, bounds.left),
+          top: Math.min(mergedBounds.top, bounds.top),
+          right: Math.max(mergedBounds.right, bounds.right),
+          bottom: Math.max(mergedBounds.bottom, bounds.bottom),
+        }
+      : bounds;
+  }
+
+  if (!mergedBounds) return null;
+  const margin = 2;
+  const left = Math.max(0, mergedBounds.left - margin);
+  const top = Math.max(0, mergedBounds.top - margin);
+  const right = Math.min(sampleWidth - 1, mergedBounds.right + margin);
+  const bottom = Math.min(sampleHeight - 1, mergedBounds.bottom + margin);
+  const scaleX = geometry.width / sampleWidth;
+  const scaleY = geometry.height / sampleHeight;
+  const crop = {
+    x: Math.floor(left * scaleX),
+    y: Math.floor(top * scaleY),
+    width: Math.ceil((right - left + 1) * scaleX),
+    height: Math.ceil((bottom - top + 1) * scaleY),
+  };
+
+  const horizontalCrop = crop.x > geometry.width * 0.03 || crop.x + crop.width < geometry.width * 0.97;
+  const verticalCrop = crop.y > geometry.height * 0.03 || crop.y + crop.height < geometry.height * 0.97;
+  if (!horizontalCrop && !verticalCrop) return null;
+  if (crop.width < geometry.width * 0.35 || crop.height < geometry.height * 0.35) return null;
+  return crop;
+}
+
+function findVisiblePixelBounds(imageData, width, height) {
+  const data = imageData.data;
+  const columnHits = new Array(width).fill(0);
+  const rowHits = new Array(height).fill(0);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const brightness = (r + g + b) / 3;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      if (brightness > 18 || chroma > 18) {
+        columnHits[x] += 1;
+        rowHits[y] += 1;
+      }
+    }
+  }
+
+  const columnThreshold = Math.max(2, height * 0.035);
+  const rowThreshold = Math.max(2, width * 0.035);
+  const left = columnHits.findIndex((hits) => hits >= columnThreshold);
+  const right = findLastIndex(columnHits, (hits) => hits >= columnThreshold);
+  const top = rowHits.findIndex((hits) => hits >= rowThreshold);
+  const bottom = findLastIndex(rowHits, (hits) => hits >= rowThreshold);
+  if (left < 0 || right < 0 || top < 0 || bottom < 0 || right <= left || bottom <= top) return null;
+  return { left, right, top, bottom };
+}
+
+function findLastIndex(items, predicate) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index], index)) return index;
+  }
+  return -1;
+}
+
+function formatSeconds(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds - minutes * 60;
+  return `${minutes}:${remainder.toFixed(2).padStart(5, "0")}`;
+}
+
+function formatMediaTime(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const wholeSeconds = Math.floor(safeSeconds - minutes * 60);
+  return `${minutes}:${String(wholeSeconds).padStart(2, "0")}`;
+}
+
+function formatSrtTimestamp(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const wholeSeconds = Math.floor(safeSeconds % 60);
+  const milliseconds = Math.floor((safeSeconds - Math.floor(safeSeconds)) * 1000);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(wholeSeconds).padStart(2, "0")},${String(milliseconds).padStart(3, "0")}`;
+}
+
+function secondsToTimecode(seconds, fps = 30) {
+  const safeFps = Math.max(1, Math.round(Number(fps) || 30));
+  const totalFrames = Math.max(0, Math.round((Number(seconds) || 0) * safeFps));
+  const frames = totalFrames % safeFps;
+  const totalSeconds = Math.floor(totalFrames / safeFps);
+  const secs = totalSeconds % 60;
+  const mins = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
+}
+
+function sanitizeFileStem(name) {
+  const stem = String(name || "video-wizard").replace(/\.[^.]+$/, "");
+  return stem
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "video-wizard";
+}
+
+function downloadBlob(blob, outputName) {
+  const url = URL.createObjectURL(blob);
+  const download = document.createElement("a");
+  download.href = url;
+  download.download = outputName;
+  download.style.display = "none";
+  document.body.append(download);
+  download.click();
+  download.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+async function renderCaptionPng(caption, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Could not prepare caption PNG canvas.");
+  }
+  ctx.clearRect(0, 0, width, height);
+  drawCaptionOnCanvas(ctx, caption, width, height);
+  return await new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("Could not prepare caption PNG."));
+      }
+    }, "image/png");
+  });
+}
+
+async function buildZipBlob(files) {
+  const preparedFiles = await Promise.all(files.map(async (file) => {
+    const bytes = new Uint8Array(await file.blob.arrayBuffer());
+    const nameBytes = new TextEncoder().encode(file.name);
+    const crc32 = computeCrc32(bytes);
+    return {
+      name: file.name,
+      nameBytes,
+      bytes,
+      crc32,
+    };
+  }));
+
+  const zipParts = [];
+  const centralDirectoryParts = [];
+  let offset = 0;
+  const timestamp = new Date();
+  const dosTime = ((timestamp.getHours() & 0x1f) << 11)
+    | ((timestamp.getMinutes() & 0x3f) << 5)
+    | Math.floor((timestamp.getSeconds() & 0x3f) / 2);
+  const dosDate = ((((timestamp.getFullYear() - 1980) & 0x7f) << 9)
+    | (((timestamp.getMonth() + 1) & 0xf) << 5)
+    | (timestamp.getDate() & 0x1f));
+
+  preparedFiles.forEach((file) => {
+    const localHeader = new Uint8Array(30 + file.nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, dosTime, true);
+    localView.setUint16(12, dosDate, true);
+    localView.setUint32(14, file.crc32 >>> 0, true);
+    localView.setUint32(18, file.bytes.length, true);
+    localView.setUint32(22, file.bytes.length, true);
+    localView.setUint16(26, file.nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(file.nameBytes, 30);
+    zipParts.push(localHeader, file.bytes);
+
+    const centralHeader = new Uint8Array(46 + file.nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, dosTime, true);
+    centralView.setUint16(14, dosDate, true);
+    centralView.setUint32(16, file.crc32 >>> 0, true);
+    centralView.setUint32(20, file.bytes.length, true);
+    centralView.setUint32(24, file.bytes.length, true);
+    centralView.setUint16(28, file.nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(file.nameBytes, 46);
+    centralDirectoryParts.push(centralHeader);
+
+    offset += localHeader.length + file.bytes.length;
+  });
+
+  const centralDirectorySize = centralDirectoryParts.reduce((total, part) => total + part.length, 0);
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, preparedFiles.length, true);
+  endView.setUint16(10, preparedFiles.length, true);
+  endView.setUint32(12, centralDirectorySize, true);
+  endView.setUint32(16, offset, true);
+  endView.setUint16(20, 0, true);
+
+  return new Blob([...zipParts, ...centralDirectoryParts, endRecord], { type: "application/zip" });
+}
+
+function computeCrc32(bytes) {
+  let crc = 0xffffffff;
+  for (let index = 0; index < bytes.length; index += 1) {
+    crc = CRC32_TABLE[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
 
 function updateTimingLabels() {
   els.durationValue.textContent = `${Number(els.durationRange.value).toFixed(1)}s`;
