@@ -227,6 +227,7 @@
             <div class="caption-subsection">
               <h3 class="caption-subsection-title">Captions</h3>
               <label class="caption-editor">
+                <div id="captionEditorSelection" class="caption-editor-selection" aria-hidden="true"></div>
                 <textarea
                   id="captionEditor"
                   spellcheck="true"
@@ -247,11 +248,15 @@
                   <video id="captionPreviewVideo" playsinline preload="auto"></video>
                   <canvas id="captionPreviewCanvas" class="caption-preview-canvas" aria-hidden="true"></canvas>
                   <span id="captionPreviewStatus" aria-hidden="true"></span>
+                  <output id="captionPreviewTime" class="caption-preview-timecode">00:00:00:00</output>
                 </div>
-                <div class="caption-preview-controls" aria-label="Preview playback controls">
-                  <button id="captionPreviewPlay" class="icon-button" type="button" disabled>Play</button>
-                  <output id="captionPreviewTime">0:00 / 0:00</output>
-                  <input id="captionPreviewSeek" type="range" min="0" max="1000" value="0" step="1" disabled aria-label="Preview time" />
+                <div class="caption-preview-controls" aria-label="Preview timeline editor">
+                  <div id="captionPreviewTimeline" class="caption-preview-timeline" tabindex="0" aria-label="Caption trim timeline">
+                    <div id="captionPreviewRuler" class="caption-preview-ruler"></div>
+                    <div id="captionPreviewCaptionLane" class="caption-preview-lane caption-preview-caption-lane">
+                      <div class="caption-preview-playhead" aria-hidden="true"></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -267,20 +272,19 @@
                 <div class="caption-row caption-row-font">
                   <label class="caption-select-control compact">
                     <span>Font</span>
-                    <select id="captionFont">
-                      <option value="TikTok Sans Semibold">TikTok Sans Semibold</option>
-                      <option value="Lato">Lato</option>
-                      <option value="Crimson Text">Crimson Text</option>
-                      <option value="Merriweather">Merriweather</option>
-                    </select>
+                    <select id="captionFont"></select>
                   </label>
-                  <label class="caption-color-control">
-                    <span>Color</span>
-                    <input id="captionColor" type="color" value="#ffffff" />
+                  <label class="caption-select-control compact">
+                    <span>Weight</span>
+                    <select id="captionFontWeight"></select>
                   </label>
                 </div>
 
                 <div class="caption-row caption-row-position-size-paragraph">
+                  <label class="caption-color-control compact">
+                    <span>Color</span>
+                    <input id="captionColor" type="color" value="#ffffff" />
+                  </label>
                   <div class="caption-point-control">
                     <span>Position</span>
                     <div class="caption-position-inline">
@@ -303,7 +307,9 @@
                     </div>
                     <input id="captionFontSize" type="range" min="12" max="120" value="50" step="1" />
                   </div>
+                </div>
 
+                <div class="caption-row caption-row-paragraph-metrics">
                   <div class="caption-paragraph-control">
                     <span>Paragraph</span>
                     <div class="caption-segmented-control paragraph-control" role="tablist" aria-label="Paragraph alignment">
@@ -324,6 +330,18 @@
                       </button>
                     </div>
                     <input id="captionParagraphAlign" type="hidden" value="center" />
+                  </div>
+                  <div class="caption-metric-stack">
+                    <label class="caption-plain-control" for="captionTrackingValue">
+                      <span>Tracking</span>
+                      <input id="captionTrackingValue" class="inline-value-input inline-value-link" type="number" min="-10" max="30" value="0" step="1" aria-label="Tracking value" readonly />
+                    </label>
+                    <input id="captionTracking" class="visually-hidden-slider" type="range" min="-10" max="30" value="0" step="1" />
+                    <label id="captionLeadingControl" class="caption-plain-control" for="captionLeadingValue">
+                      <span>Leading</span>
+                      <input id="captionLeadingValue" class="inline-value-input inline-value-link" type="number" min="-200" max="9999" value="15" step="1" aria-label="Leading value" readonly />
+                    </label>
+                    <input id="captionLeading" class="visually-hidden-slider" type="range" min="-200" max="9999" value="15" step="1" />
                   </div>
                 </div>
 
@@ -366,19 +384,6 @@
                     <input id="captionDropShadow" type="range" min="0" max="10" value="7" step="1" />
                   </div>
                   <input id="captionDropShadowValue" class="inline-value-input inline-value-link effect-value-input" type="number" min="0" max="10" value="7" step="1" aria-label="Drop shadow value" readonly />
-                </div>
-
-                <div class="caption-row caption-value-row two-up">
-                  <label class="caption-plain-control" for="captionTrackingValue">
-                    <span>Tracking</span>
-                    <input id="captionTrackingValue" class="inline-value-input inline-value-link" type="number" min="-10" max="30" value="0" step="1" aria-label="Tracking value" readonly />
-                  </label>
-                  <input id="captionTracking" class="visually-hidden-slider" type="range" min="-10" max="30" value="0" step="1" />
-                  <label id="captionLeadingControl" class="caption-plain-control" for="captionLeadingValue">
-                    <span>Leading</span>
-                    <input id="captionLeadingValue" class="inline-value-input inline-value-link" type="number" min="-200" max="9999" value="15" step="1" aria-label="Leading value" readonly />
-                  </label>
-                  <input id="captionLeading" class="visually-hidden-slider" type="range" min="-200" max="9999" value="15" step="1" />
                 </div>
 
                 <div class="caption-row caption-box-row">

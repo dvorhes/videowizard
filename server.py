@@ -15,6 +15,9 @@ FONT_PATH = ROOT / "assets/fonts/TikTok_Sans/static/TikTokSans-SemiBold.ttf"
 CAPTION_SNAP_TOLERANCE_FRAMES = 5
 CAPTION_JOIN_GAP_SECONDS = 0.5
 MIN_CAPTION_DURATION_SECONDS = 0.05
+CUT_STRONG_THRESHOLD = 0.35
+CUT_SUBTLE_THRESHOLD = 0.12
+CUT_MIN_SPACING_SECONDS = 0.25
 JOBS = {}
 
 
@@ -104,7 +107,7 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
             output.write(video_field["content"])
 
         metadata = probe_video(video_path)
-        cut_points = detect_cut_points(video_path)
+        cut_points = detect_cut_points(video_path, metadata.get("fps") or 30)
         transcript, message = transcribe_video(video_path) if transcribe else ({"text": "", "words": []}, "")
         transcript["words"] = normalize_words(transcript.get("words", []))
         metadata["fps"] = metadata.get("fps") or 30
@@ -258,11 +261,11 @@ def parse_fps(value):
     if "/" in value:
         numerator, denominator = value.split("/", 1)
         denominator = float(denominator or 1)
-        return round(float(numerator) / denominator, 3) if denominator else 30
+        return float(numerator) / denominator if denominator else 30
     return float(value)
 
 
-def detect_cut_points(video_path):
+def collect_scene_scores(video_path):
     try:
         result = subprocess.run(
             [
@@ -271,7 +274,7 @@ def detect_cut_points(video_path):
                 "-i",
                 str(video_path),
                 "-filter:v",
-                "select='gt(scene,0.35)',showinfo",
+                "select='gte(scene,0)',metadata=print,showinfo",
                 "-f",
                 "null",
                 "-",
@@ -284,17 +287,130 @@ def detect_cut_points(video_path):
     except Exception:
         return []
 
-    cut_points = []
+    scene_scores = []
+    current_frame = None
     for line in result.stderr.splitlines():
-        marker = "pts_time:"
-        if marker not in line:
+        if "pts_time:" in line:
+            try:
+                pts_value = line.split("pts_time:", 1)[1].split(" ", 1)[0]
+                current_frame = {"time": float(pts_value)}
+            except ValueError:
+                current_frame = None
             continue
-        value = line.split(marker, 1)[1].split(" ", 1)[0]
+        if "lavfi.scene_score=" not in line or current_frame is None:
+            continue
         try:
-            cut_points.append(round(float(value), 3))
+            score_value = line.split("lavfi.scene_score=", 1)[1].split()[0]
+            scene_scores.append(
+                {
+                    "time": float(current_frame["time"]),
+                    "score": float(score_value),
+                },
+            )
         except ValueError:
             continue
-    return sorted(set(cut_points))
+        finally:
+            current_frame = None
+    return scene_scores
+
+
+def is_local_peak(index, scene_scores):
+    current_score = scene_scores[index]["score"]
+    previous_score = scene_scores[index - 1]["score"] if index > 0 else -1
+    next_score = scene_scores[index + 1]["score"] if index + 1 < len(scene_scores) else -1
+    return current_score >= previous_score and current_score > next_score
+
+
+def collapse_cut_candidates(candidates, minimum_spacing=CUT_MIN_SPACING_SECONDS):
+    collapsed = []
+    for candidate in sorted(candidates, key=lambda item: (item["time"], -item["score"])):
+        if not collapsed:
+            collapsed.append(candidate)
+            continue
+        previous = collapsed[-1]
+        if candidate["time"] - previous["time"] < minimum_spacing:
+            if candidate["score"] > previous["score"]:
+                collapsed[-1] = candidate
+            continue
+        collapsed.append(candidate)
+    return [candidate["time"] for candidate in collapsed]
+
+
+def collect_luma_diff_scores(video_path, fps, width=64, height=114):
+    frame_size = width * height
+    try:
+        process = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(video_path),
+                "-vf",
+                f"scale={width}:{height}:flags=bilinear,format=gray",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "gray",
+                "-",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except Exception:
+        return []
+
+    diffs = []
+    previous_frame = None
+    frame_index = 0
+    try:
+        while True:
+            buffer = process.stdout.read(frame_size)
+            if len(buffer) < frame_size:
+                break
+            if previous_frame is not None:
+                absolute_diff = sum(abs(current - previous) for current, previous in zip(buffer, previous_frame))
+                diffs.append(
+                    {
+                        "time": frame_index / float(fps),
+                        "score": absolute_diff / frame_size / 255,
+                    },
+                )
+            previous_frame = buffer
+            frame_index += 1
+    finally:
+        if process.stdout:
+            process.stdout.close()
+        if process.stderr:
+            process.stderr.close()
+        process.wait(timeout=60)
+    return diffs
+
+
+def detect_cut_points(video_path, fps=30):
+    scene_scores = collect_scene_scores(video_path)
+    if not scene_scores:
+        return []
+
+    strong_candidates = [
+        frame for index, frame in enumerate(scene_scores)
+        if frame["score"] >= CUT_STRONG_THRESHOLD and is_local_peak(index, scene_scores)
+    ]
+
+    subtle_candidates = []
+    for index, frame in enumerate(scene_scores):
+        if frame["score"] < CUT_SUBTLE_THRESHOLD or not is_local_peak(index, scene_scores):
+            continue
+        nearest_strong_distance = min(
+            (abs(frame["time"] - strong["time"]) for strong in strong_candidates),
+            default=float("inf"),
+        )
+        if nearest_strong_distance < CUT_MIN_SPACING_SECONDS:
+            continue
+        subtle_candidates.append(frame)
+
+    return collapse_cut_candidates([*strong_candidates, *subtle_candidates])
 
 
 def transcribe_video(video_path):
