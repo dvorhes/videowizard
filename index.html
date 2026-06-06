@@ -5,60 +5,119 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Video Wizard</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   </head>
   <body>
     <main class="shell">
       <section class="workspace" aria-labelledby="app-title">
         <header class="masthead">
-          <div class="brand-nav">
-            <button
-              id="brandMenuButton"
-              class="brand-logo-button"
-              type="button"
-              aria-label="Open Video Wizard navigation"
-              aria-expanded="false"
-              aria-controls="brandMenu"
-            >
-              <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
-            </button>
-            <nav id="brandMenu" class="brand-menu" aria-label="Video Wizard functions" hidden>
-              <a href="/" data-route="slideshow">
-                <span>Slideshow Generator</span>
-                <small>Create photo slideshows</small>
-              </a>
-              <a href="/captions" data-route="captions">
-                <span>Captions</span>
-                <small>Add captions to videos</small>
-              </a>
-            </nav>
-          </div>
           <div class="brand">
-            <h1 id="app-title">Slideshow Generator</h1>
+            <div class="brand-home-nav">
+              <button
+                id="homeMenuButton"
+                class="brand-home-button"
+                type="button"
+                aria-label="Open Video Wizard tools"
+                aria-expanded="false"
+                aria-controls="homeMenu"
+              >
+                <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
+              </button>
+              <nav id="homeMenu" class="brand-menu home-menu" aria-label="Video Wizard tools" hidden>
+                <a href="/" data-route="home">
+                  <span>Home</span>
+                </a>
+                <a href="/slideshow" data-route="slideshow">
+                  <span>Slideshows</span>
+                  <small>Create photo slideshows</small>
+                </a>
+                <a href="/captions" data-route="captions">
+                  <span>Captions</span>
+                  <small>Add captions to videos</small>
+                </a>
+              </nav>
+            </div>
+            <h1 id="app-title">Video Wizard</h1>
           </div>
-          <div id="captionHelp" class="page-help" hidden>
-            <button
-              id="captionHelpButton"
-              class="page-help-button"
-              type="button"
-              aria-label="How captions works"
-              aria-expanded="false"
-              aria-controls="captionHelpPopover"
-            >
-              ?
-            </button>
-            <div id="captionHelpPopover" class="page-help-popover" role="dialog" aria-label="How captions works" hidden>
-              <p><strong>How this tool works</strong></p>
-              <ol>
-                <li>Add a local video.</li>
-                <li>The app transcribes it in your browser and fills the captions editor.</li>
-                <li>Edit the words or line breaks, then style the captions in Settings.</li>
-                <li>Use Preview to check timing and layout.</li>
-                <li>Export a captioned video, SRT, or EDL + PNG package.</li>
-              </ol>
-              <p>No cloud upload: this tool transcribes, previews, renders, and exports directly in your browser.</p>
+          <div class="masthead-actions">
+            <div id="accountPlanBadge" class="account-plan-badge" hidden>
+              <span id="accountPlanBadgeLabel">Free</span>
+            </div>
+            <div class="brand-nav">
+              <button
+                id="brandMenuButton"
+                class="utility-menu-button"
+                type="button"
+                aria-label="Open Video Wizard menu"
+                aria-expanded="false"
+                aria-controls="brandMenu"
+              >
+                <span class="menu-toggle-icon" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+              </button>
+              <div id="brandMenu" class="brand-menu utility-menu" aria-label="Video Wizard actions" hidden>
+                <button class="brand-menu-action" type="button" data-path="/settings">Settings</button>
+                <button class="brand-menu-action" type="button" data-menu-action="help">Help</button>
+                <button class="brand-menu-action" type="button" data-menu-action="logout">Log out</button>
+                <div id="utilityHelpPanel" class="utility-help-panel" hidden>
+                  <p id="utilityHelpTitle" class="utility-help-title"></p>
+                  <ul id="utilityHelpList" class="utility-help-list"></ul>
+                  <p id="utilityHelpFooter" class="utility-help-footer"></p>
+                </div>
+                <p id="utilityMenuStatus" class="utility-menu-status" hidden></p>
+              </div>
             </div>
           </div>
         </header>
+
+        <div id="homePage" class="page-view home-page" data-page="home">
+          <div class="home-intro">
+            <h1 class="home-copy">Great tools to make great videos</h1>
+            <br />
+            <p class="home-subcopy">(made by an actual video editor)</p>
+          </div>
+
+          <section class="freebie-spotlight panel" aria-labelledby="freebie-title">
+            <p class="freebie-kicker">Freebie placeholder</p>
+            <h2 id="freebie-title">Feature a popular free download here</h2>
+            <p class="freebie-copy">
+              This can become a Gumroad embed for a free template, preset, or giveaway that helps collect emails and
+              gives visitors an easy first win.
+            </p>
+            <button class="tool-card-action freebie-action" type="button">Gumroad embed goes here</button>
+          </section>
+
+          <section class="tool-directory" aria-label="Video Wizard tools">
+            <div class="tool-card-grid">
+              <article class="tool-card panel" data-path="/slideshow" role="link" tabindex="0" aria-label="Open Slideshow Generator">
+                <h3>Slideshow Generator</h3>
+                <p>Turn a batch of photos and optional music into a polished slideshow preview and export.</p>
+                <button class="tool-card-action" type="button" data-path="/slideshow">Open</button>
+              </article>
+
+              <article class="tool-card panel" data-path="/captions" role="link" tabindex="0" aria-label="Open Captions Utility">
+                <h3>Captions Utility</h3>
+                <p>Transcribe, refine, style, and export captioned videos without leaving the browser.</p>
+                <button class="tool-card-action" type="button" data-path="/captions">Open</button>
+              </article>
+
+              <article
+                class="tool-card panel"
+                data-external-url="https://videowizard.gumroad.com/"
+                role="link"
+                tabindex="0"
+                aria-label="Open Adobe Premiere MOGRTs"
+              >
+                <h3>Adobe Premiere MOGRTs</h3>
+                <p>Easy-to-use, actually good, and actually useful motion graphics templates for Adobe Premiere.</p>
+                <button class="tool-card-action" type="button" data-external-url="https://videowizard.gumroad.com/">Open</button>
+              </article>
+            </div>
+          </section>
+        </div>
 
         <div id="slideshowPage" class="page-view grid" data-page="slideshow">
           <section class="panel source-panel" aria-labelledby="photos-title">
@@ -84,112 +143,112 @@
           </section>
 
           <aside class="right-rail">
-            <button id="generateButton" class="generate" type="button">Generate</button>
-            <p id="outputLocation" class="output-location">Choose filename and save location when generating.</p>
+            <details id="settingsMenu" class="settings-menu">
+              <summary>
+                <span>Settings</span>
+                <small>Music, timing, transitions, format</small>
+              </summary>
 
-            <div class="rail-audio">
-              <label class="file-row">
-                <span>Music</span>
-                <input id="audioInput" type="file" />
-              </label>
-            </div>
-
-          <details id="settingsMenu" class="settings-menu">
-            <summary>
-              <span>Settings</span>
-              <small>Timing, transitions, format</small>
-            </summary>
-
-            <div class="settings-drawer">
-              <section class="settings-section" aria-labelledby="settings-title">
-                <div class="panel-heading">
-                  <div>
-                    <h2 id="settings-title">Timing</h2>
+              <div class="settings-drawer">
+                <section class="settings-section" aria-labelledby="settings-title">
+                  <div class="panel-heading">
+                    <div>
+                      <h2 id="settings-title">Timing</h2>
+                    </div>
                   </div>
-                </div>
 
-                <div id="loopControls" class="loop-controls">
+                  <div class="rail-audio">
+                    <label class="file-row">
+                      <span>Music</span>
+                      <input id="audioInput" type="file" />
+                    </label>
+                  </div>
+
+                  <div id="loopControls" class="loop-controls">
+                    <div class="control">
+                      <div class="control-label">
+                        <label for="loopCountRange">Loop Slideshow</label>
+                        <output id="loopCountValue" for="loopCountRange">0 loops</output>
+                      </div>
+                      <input id="loopCountRange" type="range" min="0" max="99" value="0" step="1" />
+                    </div>
+                    <p id="loopDurationLabel" class="loop-duration">Total duration: 0:00</p>
+                  </div>
+
                   <div class="control">
                     <div class="control-label">
-                      <label for="loopCountRange">Loop Slideshow</label>
-                      <output id="loopCountValue" for="loopCountRange">0 loops</output>
+                      <label for="durationRange">Seconds per image</label>
+                      <output id="durationValue" for="durationRange">5.0s</output>
                     </div>
-                    <input id="loopCountRange" type="range" min="0" max="99" value="0" step="1" />
+                    <input id="durationRange" type="range" min="1" max="15" value="5" step="0.5" />
                   </div>
-                  <p id="loopDurationLabel" class="loop-duration">Total duration: 0:00</p>
-                </div>
 
-                <div class="control">
-                  <div class="control-label">
-                    <label for="durationRange">Seconds per image</label>
-                    <output id="durationValue" for="durationRange">5.0s</output>
+                  <div class="control">
+                    <div class="control-label">
+                      <label for="transitionDuration">Transition length</label>
+                      <output id="transitionDurationValue" for="transitionDuration">1.0s</output>
+                    </div>
+                    <input id="transitionDuration" type="range" min="0.2" max="3" value="1" step="0.1" />
                   </div>
-                  <input id="durationRange" type="range" min="1" max="15" value="5" step="0.5" />
-                </div>
 
-                <div class="control">
-                  <div class="control-label">
-                    <label for="transitionDuration">Transition length</label>
-                    <output id="transitionDurationValue" for="transitionDuration">1.0s</output>
+                  <fieldset class="transition-group">
+                    <legend>Orientation</legend>
+                    <label><input type="radio" name="orientation" value="horizontal" checked /> Horizontal</label>
+                    <label><input type="radio" name="orientation" value="vertical" /> Vertical</label>
+                  </fieldset>
+
+                  <div class="control">
+                    <div class="control-label">
+                      <label for="qualityRange">Quality</label>
+                      <output id="qualityValue" for="qualityRange">High - 1920x1080</output>
+                    </div>
+                    <input id="qualityRange" type="range" min="1" max="3" value="3" step="1" />
                   </div>
-                  <input id="transitionDuration" type="range" min="0.2" max="3" value="1" step="0.1" />
-                </div>
 
-                <fieldset class="transition-group">
-                  <legend>Orientation</legend>
-                  <label><input type="radio" name="orientation" value="horizontal" checked /> Horizontal</label>
-                  <label><input type="radio" name="orientation" value="vertical" /> Vertical</label>
-                </fieldset>
+                  <label class="toggle-row">
+                    <span>
+                      <strong>Ken Burns</strong>
+                      <small>Slow zoom towards photo subject</small>
+                    </span>
+                    <input id="kenBurnsToggle" type="checkbox" checked />
+                  </label>
 
-                <div class="control">
-                  <div class="control-label">
-                    <label for="qualityRange">Quality</label>
-                    <output id="qualityValue" for="qualityRange">High - 1920x1080</output>
-                  </div>
-                  <input id="qualityRange" type="range" min="1" max="3" value="3" step="1" />
-                </div>
+                  <label class="toggle-row">
+                    <span>
+                      <strong>Fill Background</strong>
+                      <small>Blurry background parallax effect</small>
+                    </span>
+                    <input id="fillBackgroundToggle" type="checkbox" checked />
+                  </label>
 
-                <label class="toggle-row">
-                  <span>
-                    <strong>Ken Burns</strong>
-                    <small>Slow zoom towards photo subject</small>
-                  </span>
-                  <input id="kenBurnsToggle" type="checkbox" checked />
-                </label>
+                  <fieldset class="transition-group">
+                    <legend>Transition</legend>
+                    <label><input type="radio" name="transition" value="fade" checked /> Dissolve</label>
+                    <label><input type="radio" name="transition" value="hardcut" /> Hard cut</label>
+                    <label><input type="radio" name="transition" value="slideleft" /> Slide</label>
+                    <label><input type="radio" name="transition" value="wipeleft" /> Wipe</label>
+                    <label><input type="radio" name="transition" value="random" /> Random</label>
+                  </fieldset>
+                </section>
 
-                <label class="toggle-row">
-                  <span>
-                    <strong>Fill Background</strong>
-                    <small>Blurry background parallax effect</small>
-                  </span>
-                  <input id="fillBackgroundToggle" type="checkbox" checked />
-                </label>
+              </div>
+            </details>
 
-                <fieldset class="transition-group">
-                  <legend>Transition</legend>
-                  <label><input type="radio" name="transition" value="fade" checked /> Dissolve</label>
-                  <label><input type="radio" name="transition" value="hardcut" /> Hard cut</label>
-                  <label><input type="radio" name="transition" value="slideleft" /> Slide</label>
-                  <label><input type="radio" name="transition" value="wipeleft" /> Wipe</label>
-                  <label><input type="radio" name="transition" value="random" /> Random</label>
-                </fieldset>
-              </section>
+            <section class="render-panel" aria-labelledby="preview-title">
+              <div>
+                <h2 id="preview-title">Preview</h2>
+                <p id="statusText" aria-live="polite"></p>
+              </div>
 
-            </div>
-          </details>
+              <div id="livePreview" class="live-preview">
+                <video id="previewVideo" controls autoplay muted loop playsinline></video>
+                <span id="previewStatus" class="preview-status">Add photos to preview</span>
+              </div>
+              <progress id="progressBar" value="0" max="1"></progress>
+            </section>
 
-          <section class="render-panel" aria-labelledby="preview-title">
-            <div>
-              <h2 id="preview-title">Preview</h2>
-              <p id="statusText" aria-live="polite"></p>
-            </div>
-
-            <div id="livePreview" class="live-preview">
-              <video id="previewVideo" controls autoplay muted loop playsinline></video>
-              <span id="previewStatus" class="preview-status">Add photos to preview</span>
-            </div>
-            <progress id="progressBar" value="0" max="1"></progress>
-          </section>
+            <button id="generateButton" class="generate" type="button">Generate</button>
+            <p id="outputLocation" class="output-location">Choose filename and save location when generating.</p>
           </aside>
         </div>
 
@@ -203,25 +262,6 @@
                 <span class="drop-title">Add Video</span>
                 <span id="captionVideoName" class="drop-copy"></span>
               </label>
-            </div>
-
-            <div class="caption-subsection">
-              <h3 class="caption-subsection-title">Export</h3>
-              <div class="caption-actions">
-                <button id="renderCaptionsButton" class="secondary" type="button" disabled>Video</button>
-                <button id="exportSrtButton" class="secondary" type="button" disabled>SRT</button>
-                <button id="exportEdlPngButton" class="secondary" type="button" disabled>EDL + PNG</button>
-              </div>
-              <div id="captionProgressGroup" class="caption-progress" hidden>
-                <div class="caption-progress-header">
-                  <span id="captionProgressLabel" class="caption-progress-label">Waiting for video</span>
-                  <output id="captionProgressPercent" for="captionProgressBar">0%</output>
-                </div>
-                <progress id="captionProgressBar" value="0" max="100"></progress>
-              </div>
-
-              <p id="captionStatus" class="output-location" aria-live="polite"></p>
-              <p id="captionDiagnostics" class="caption-diagnostics" aria-live="polite"></p>
             </div>
 
             <div class="caption-subsection">
@@ -422,7 +462,172 @@
 
               </div>
             </section>
+
+            <section class="render-panel" aria-labelledby="caption-export-title">
+              <div>
+                <h2 id="caption-export-title">Export</h2>
+              </div>
+
+              <div class="caption-actions">
+                <button id="renderCaptionsButton" class="secondary" type="button" disabled>Video</button>
+                <button id="exportSrtButton" class="secondary" type="button" disabled>SRT</button>
+                <button id="exportEdlPngButton" class="secondary" type="button" disabled>EDL + PNG</button>
+              </div>
+              <div id="captionProgressGroup" class="caption-progress" hidden>
+                <div class="caption-progress-header">
+                  <span id="captionProgressLabel" class="caption-progress-label">Waiting for video</span>
+                  <output id="captionProgressPercent" for="captionProgressBar">0%</output>
+                </div>
+                <progress id="captionProgressBar" value="0" max="100"></progress>
+              </div>
+
+              <p id="captionStatus" class="output-location" aria-live="polite"></p>
+              <p id="captionDiagnostics" class="caption-diagnostics" aria-live="polite"></p>
+            </section>
           </aside>
+        </div>
+
+        <div id="settingsPage" class="page-view settings-page" data-page="settings" hidden>
+          <section class="panel settings-hero" aria-labelledby="settings-page-title">
+            <div>
+              <h2 id="settings-page-title">Settings</h2>
+            </div>
+            <p class="section-copy">Account, saved defaults, and caption presets.</p>
+          </section>
+
+          <section class="settings-grid" aria-label="Settings overview">
+            <article class="panel settings-card">
+              <div class="settings-card-header">
+                <div>
+                  <p class="settings-label">Account</p>
+                  <h3>Sign in</h3>
+                </div>
+                <span id="accountStatusChip" class="settings-chip">Guest</span>
+              </div>
+              <div class="settings-stat-grid single-column">
+                <div class="settings-stat">
+                  <span>Auth status</span>
+                  <strong id="accountAuthStatus">Not signed in</strong>
+                </div>
+                <div class="settings-stat">
+                  <span>Email</span>
+                  <strong id="accountUserEmail">Browser guest</strong>
+                </div>
+                <div class="settings-stat">
+                  <span>Plan</span>
+                  <strong id="accountPlanName">Free</strong>
+                </div>
+              </div>
+              <form id="authForm" class="settings-form">
+                <label class="settings-input-row">
+                  <span>Email</span>
+                  <input id="authEmail" type="email" autocomplete="email" placeholder="editor@example.com" />
+                </label>
+                <label class="settings-input-row">
+                  <span>Password</span>
+                  <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password" />
+                </label>
+                <div class="settings-actions">
+                  <button id="signInButton" class="ghost-action" type="submit">Sign in</button>
+                  <button id="signUpButton" class="ghost-action" type="button">Create account</button>
+                  <button id="signOutButton" class="ghost-action" type="button">Sign out</button>
+                </div>
+              </form>
+              <p id="authMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+
+            <article class="panel settings-card">
+              <div class="settings-card-header">
+                <div>
+                  <p class="settings-label">Access</p>
+                  <h3>Status</h3>
+                </div>
+                <span id="billingStatusChip" class="settings-chip">Free</span>
+              </div>
+              <div class="settings-stat-grid single-column">
+                <div class="settings-stat">
+                  <span>Current plan</span>
+                  <strong id="billingPlanLabel">Free</strong>
+                </div>
+                <div class="settings-stat">
+                  <span>Billing status</span>
+                  <strong id="billingStatusLabel">Not active</strong>
+                </div>
+              </div>
+              <p id="billingSummary" class="settings-note">Local exports are available in this version.</p>
+              <div class="settings-actions" hidden>
+                <button id="upgradeButton" class="ghost-action" type="button">Upgrade</button>
+                <button id="manageBillingButton" class="ghost-action" type="button">Manage billing</button>
+                <button id="refreshAccessButton" class="ghost-action" type="button">Refresh access</button>
+              </div>
+              <p id="billingMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+
+            <article class="panel settings-card">
+              <div class="settings-card-header">
+                <div>
+                  <p class="settings-label">Local profile</p>
+                  <h3>Defaults</h3>
+                </div>
+                <span class="settings-chip">Local</span>
+              </div>
+              <form id="profileSettingsForm" class="settings-form">
+                <label class="settings-input-row">
+                  <span>Display name</span>
+                  <input id="profileDisplayName" type="text" maxlength="60" placeholder="Video Wizard Creator" />
+                </label>
+                <label class="settings-input-row">
+                  <span>Default slideshow quality</span>
+                  <select id="profileDefaultQuality">
+                    <option value="1">Low 360p</option>
+                    <option value="2">Medium 720p</option>
+                    <option value="3">High 1080p</option>
+                  </select>
+                </label>
+                <label class="settings-input-row">
+                  <span>Default landing page</span>
+                  <select id="profileDefaultRoute">
+                    <option value="/">Home</option>
+                    <option value="/slideshow">Slideshows</option>
+                    <option value="/captions">Captions</option>
+                    <option value="/settings">Settings</option>
+                  </select>
+                </label>
+                <label class="toggle-row compact">
+                  <span>
+                    <strong>Remember this browser</strong>
+                    <small>Restore recent settings automatically</small>
+                  </span>
+                  <input id="profileAutoSave" type="checkbox" checked />
+                </label>
+                <div class="settings-actions">
+                  <button id="saveProfileSettingsButton" class="ghost-action" type="submit">Save defaults</button>
+                </div>
+              </form>
+              <p id="profileSettingsMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+
+            <article class="panel settings-card wide">
+              <div class="settings-card-header">
+                <div>
+                  <p class="settings-label">Caption presets</p>
+                  <h3>Saved presets</h3>
+                </div>
+                <div class="settings-actions inline-actions">
+                  <button id="saveCaptionProfileButton" class="ghost-action" type="button">Save current preset</button>
+                </div>
+              </div>
+              <div id="savedProfilesList" class="profile-list">
+                <div class="profile-row muted">
+                  <div>
+                    <strong>No saved profiles yet</strong>
+                    <span>Saved presets will appear here.</span>
+                  </div>
+                </div>
+              </div>
+              <p id="savedProfilesMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+          </section>
         </div>
       </section>
     </main>

@@ -1,4 +1,6 @@
 import errno
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -6,11 +8,15 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
+DATA_DIR = ROOT / "data"
+ACCOUNT_STORE_PATH = DATA_DIR / "account_store.json"
 FONT_PATH = ROOT / "assets/fonts/TikTok_Sans/static/TikTokSans-SemiBold.ttf"
 CAPTION_SNAP_TOLERANCE_FRAMES = 5
 CAPTION_JOIN_GAP_SECONDS = 0.5
@@ -19,13 +25,27 @@ CUT_STRONG_THRESHOLD = 0.35
 CUT_SUBTLE_THRESHOLD = 0.12
 CUT_MIN_SPACING_SECONDS = 0.25
 JOBS = {}
+FREE_PLAN_NAME = "Free"
+PREMIUM_PLAN_NAME = os.environ.get("VIDEO_WIZARD_PREMIUM_PLAN_NAME", "Video Wizard Pro")
+PREMIUM_FEATURES = [
+    "1080p slideshow exports",
+    "Burned-in caption video export",
+    "EDL + PNG caption package",
+]
 
 
 class SlideshowHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
-        requested_path = self.path.split("?", 1)[0].split("#", 1)[0]
+        parsed_url = urlparse(self.path)
+        requested_path = parsed_url.path
         if requested_path.startswith("/api/captions/output/"):
             self.send_caption_output(requested_path.rsplit("/", 1)[-1])
+            return
+        if requested_path == "/api/app-config":
+            self.send_json(get_public_app_config())
+            return
+        if requested_path == "/api/account/status":
+            self.send_account_status(parsed_url.query)
             return
 
         local_path = self.translate_path(requested_path)
@@ -35,7 +55,8 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        requested_path = self.path.split("?", 1)[0].split("#", 1)[0]
+        parsed_url = urlparse(self.path)
+        requested_path = parsed_url.path
         if requested_path == "/api/captions/analyze":
             self.analyze_caption_video()
             return
@@ -44,6 +65,12 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
             return
         if requested_path == "/api/captions/render":
             self.render_caption_video()
+            return
+        if requested_path == "/api/account/status":
+            self.update_account_status()
+            return
+        if requested_path == "/api/billing/webhook":
+            self.handle_billing_webhook()
             return
         self.send_json({"error": "Unknown endpoint."}, status=404)
 
@@ -172,6 +199,42 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def read_json_body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        raw_body = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            return json.loads(raw_body.decode("utf-8") or "{}"), raw_body
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"Invalid JSON body: {error}") from error
+
+    def send_account_status(self, query_string=""):
+        params = parse_qs(query_string or "")
+        user_id = first_query_value(params, "user_id")
+        email = first_query_value(params, "email")
+        self.send_json(build_account_status_response(user_id=user_id, email=email))
+
+    def update_account_status(self):
+        try:
+            payload, _ = self.read_json_body()
+        except RuntimeError as error:
+            self.send_json({"error": str(error)}, status=400)
+            return
+
+        user_id = payload.get("user_id")
+        email = payload.get("email")
+        self.send_json(build_account_status_response(user_id=user_id, email=email))
+
+    def handle_billing_webhook(self):
+        try:
+            payload, raw_body = self.read_json_body()
+            verify_paddle_signature(self.headers.get("Paddle-Signature"), raw_body)
+            result = apply_billing_event(payload)
+        except RuntimeError as error:
+            self.send_json({"error": str(error)}, status=400)
+            return
+
+        self.send_json({"ok": True, "result": result})
+
 
 def parse_json_field(value, fallback):
     if not value:
@@ -216,6 +279,219 @@ def parse_multipart_form(headers, rfile):
         else:
             form[name] = {"value": content.decode("utf-8", errors="replace").rstrip("\r\n")}
     return form
+
+
+def first_query_value(params, key):
+    values = params.get(key) or []
+    return values[0] if values else None
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def get_public_app_config():
+    return {
+        "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
+        "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
+        "paddleClientToken": os.environ.get("PADDLE_CLIENT_TOKEN", ""),
+        "paddleEnvironment": os.environ.get("PADDLE_ENV", "sandbox"),
+        "paddlePriceId": os.environ.get("PADDLE_PRICE_ID", ""),
+        "paddleSuccessUrl": os.environ.get("PADDLE_SUCCESS_URL", ""),
+        "paddleCancelUrl": os.environ.get("PADDLE_CANCEL_URL", ""),
+        "billingPortalUrl": os.environ.get("PADDLE_BILLING_PORTAL_URL", ""),
+        "premiumPlanName": PREMIUM_PLAN_NAME,
+        "premiumFeatures": PREMIUM_FEATURES,
+    }
+
+
+def load_account_store():
+    if not ACCOUNT_STORE_PATH.exists():
+        return {"users": {}}
+    try:
+        return json.loads(ACCOUNT_STORE_PATH.read_text())
+    except json.JSONDecodeError:
+        return {"users": {}}
+
+
+def save_account_store(store):
+    DATA_DIR.mkdir(exist_ok=True)
+    temp_path = ACCOUNT_STORE_PATH.with_suffix(".tmp")
+    temp_path.write_text(json.dumps(store, indent=2, sort_keys=True))
+    temp_path.replace(ACCOUNT_STORE_PATH)
+
+
+def default_account_record(user_id=None, email=None):
+    return {
+        "user_id": user_id or "",
+        "email": email or "",
+        "plan_name": FREE_PLAN_NAME,
+        "billing_status": "free",
+        "premium_access": False,
+        "subscription_id": "",
+        "customer_id": "",
+        "price_id": "",
+        "updated_at": utc_now_iso(),
+        "source": "local-default",
+    }
+
+
+def normalize_billing_status(status):
+    value = str(status or "").strip().lower()
+    if not value:
+        return "free"
+    replacements = {
+        "trial": "trialing",
+        "past due": "past_due",
+    }
+    return replacements.get(value, value.replace(" ", "_"))
+
+
+def has_active_premium(status):
+    return normalize_billing_status(status) in {"active", "trialing", "past_due"}
+
+
+def build_account_status_response(user_id=None, email=None):
+    store = load_account_store()
+    user_key = str(user_id or "").strip()
+    user_record = store["users"].get(user_key) if user_key else None
+    if user_key and not user_record:
+        user_record = default_account_record(user_key, email=email)
+        store["users"][user_key] = user_record
+        save_account_store(store)
+    elif user_record and email and not user_record.get("email"):
+        user_record["email"] = email
+        user_record["updated_at"] = utc_now_iso()
+        save_account_store(store)
+
+    account = user_record or default_account_record(user_id=user_key, email=email)
+    return {
+        "user_id": account.get("user_id") or user_key,
+        "email": account.get("email") or email or "",
+        "plan_name": account.get("plan_name") or FREE_PLAN_NAME,
+        "billing_status": normalize_billing_status(account.get("billing_status")),
+        "premium_access": bool(account.get("premium_access")),
+        "subscription_id": account.get("subscription_id") or "",
+        "customer_id": account.get("customer_id") or "",
+        "price_id": account.get("price_id") or "",
+        "updated_at": account.get("updated_at") or utc_now_iso(),
+        "premium_features": PREMIUM_FEATURES,
+    }
+
+
+def parse_paddle_signature(header_value):
+    parsed = {}
+    for part in str(header_value or "").split(";"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        parsed[key.strip()] = value.strip()
+    return parsed
+
+
+def verify_paddle_signature(header_value, raw_body):
+    secret = os.environ.get("PADDLE_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        return
+    signature = parse_paddle_signature(header_value)
+    timestamp = signature.get("ts")
+    digest = signature.get("h1")
+    if not timestamp or not digest:
+        raise RuntimeError("Missing Paddle signature headers.")
+    signed_payload = timestamp.encode("utf-8") + b":" + raw_body
+    expected = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, digest):
+        raise RuntimeError("Paddle webhook signature verification failed.")
+
+
+def get_nested_value(payload, *path, default=None):
+    current = payload
+    for key in path:
+        if isinstance(current, dict):
+            current = current.get(key)
+            continue
+        if isinstance(current, list) and isinstance(key, int):
+            if key < 0 or key >= len(current):
+                return default
+            current = current[key]
+            continue
+        return default
+    return current if current is not None else default
+
+
+def extract_custom_data(data):
+    return (
+        get_nested_value(data, "custom_data", default={})
+        or get_nested_value(data, "customData", default={})
+        or {}
+    )
+
+
+def apply_billing_event(payload):
+    event_type = str(payload.get("event_type") or payload.get("eventType") or "").strip()
+    data = payload.get("data") or {}
+    custom_data = extract_custom_data(data)
+    user_id = (
+        custom_data.get("supabase_user_id")
+        or custom_data.get("user_id")
+        or custom_data.get("supabaseUserId")
+        or ""
+    )
+    email = (
+        get_nested_value(data, "customer", "email")
+        or data.get("customer_email")
+        or custom_data.get("supabase_email")
+        or custom_data.get("email")
+        or ""
+    )
+    if not user_id:
+        raise RuntimeError("Webhook payload is missing custom_data.supabase_user_id.")
+
+    subscription_id = str(data.get("id") or data.get("subscription_id") or data.get("subscriptionId") or "")
+    customer_id = str(
+        get_nested_value(data, "customer", "id")
+        or data.get("customer_id")
+        or data.get("customerId")
+        or ""
+    )
+    status = normalize_billing_status(
+        data.get("status")
+        or event_type.rsplit(".", 1)[-1]
+    )
+    plan_name = (
+        get_nested_value(data, "items", 0, "price", "name")
+        if isinstance(data.get("items"), list) and data["items"]
+        else None
+    ) or PREMIUM_PLAN_NAME
+    price_id = (
+        get_nested_value(data, "items", 0, "price", "id")
+        if isinstance(data.get("items"), list) and data["items"]
+        else None
+    ) or str(data.get("price_id") or data.get("priceId") or os.environ.get("PADDLE_PRICE_ID", ""))
+
+    store = load_account_store()
+    record = store["users"].get(user_id) or default_account_record(user_id=user_id, email=email)
+    record.update(
+        {
+            "user_id": user_id,
+            "email": email or record.get("email", ""),
+            "plan_name": FREE_PLAN_NAME if not has_active_premium(status) else plan_name,
+            "billing_status": status,
+            "premium_access": has_active_premium(status),
+            "subscription_id": subscription_id,
+            "customer_id": customer_id,
+            "price_id": price_id,
+            "updated_at": utc_now_iso(),
+            "source": f"paddle:{event_type or 'unknown'}",
+        }
+    )
+    store["users"][user_id] = record
+    save_account_store(store)
+    return {
+        "user_id": user_id,
+        "billing_status": status,
+        "premium_access": record["premium_access"],
+    }
 
 
 def run_command(args, timeout=600):

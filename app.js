@@ -69,13 +69,52 @@ const CRC32_TABLE = new Uint32Array(Array.from({ length: 256 }, (_, index) => {
 }));
 const els = {
   appTitle: document.querySelector("#app-title"),
+  homeMenuButton: document.querySelector("#homeMenuButton"),
+  homeMenu: document.querySelector("#homeMenu"),
   brandMenuButton: document.querySelector("#brandMenuButton"),
   brandMenu: document.querySelector("#brandMenu"),
-  captionHelp: document.querySelector("#captionHelp"),
-  captionHelpButton: document.querySelector("#captionHelpButton"),
-  captionHelpPopover: document.querySelector("#captionHelpPopover"),
+  accountPlanBadge: document.querySelector("#accountPlanBadge"),
+  accountPlanBadgeLabel: document.querySelector("#accountPlanBadgeLabel"),
+  utilityHelpPanel: document.querySelector("#utilityHelpPanel"),
+  utilityHelpTitle: document.querySelector("#utilityHelpTitle"),
+  utilityHelpList: document.querySelector("#utilityHelpList"),
+  utilityHelpFooter: document.querySelector("#utilityHelpFooter"),
+  utilityMenuStatus: document.querySelector("#utilityMenuStatus"),
+  logoutMenuAction: document.querySelector("[data-menu-action='logout']"),
+  homePage: document.querySelector("#homePage"),
   slideshowPage: document.querySelector("#slideshowPage"),
   captionsPage: document.querySelector("#captionsPage"),
+  settingsPage: document.querySelector("#settingsPage"),
+  accountStatusChip: document.querySelector("#accountStatusChip"),
+  accountAuthStatus: document.querySelector("#accountAuthStatus"),
+  accountUserEmail: document.querySelector("#accountUserEmail"),
+  accountPlanName: document.querySelector("#accountPlanName"),
+  accountPremiumStatus: document.querySelector("#accountPremiumStatus"),
+  authForm: document.querySelector("#authForm"),
+  authEmail: document.querySelector("#authEmail"),
+  authPassword: document.querySelector("#authPassword"),
+  signInButton: document.querySelector("#signInButton"),
+  signUpButton: document.querySelector("#signUpButton"),
+  signOutButton: document.querySelector("#signOutButton"),
+  authMessage: document.querySelector("#authMessage"),
+  billingStatusChip: document.querySelector("#billingStatusChip"),
+  billingSummary: document.querySelector("#billingSummary"),
+  billingPlanLabel: document.querySelector("#billingPlanLabel"),
+  billingStatusLabel: document.querySelector("#billingStatusLabel"),
+  billingFeatureLabel: document.querySelector("#billingFeatureLabel"),
+  upgradeButton: document.querySelector("#upgradeButton"),
+  manageBillingButton: document.querySelector("#manageBillingButton"),
+  refreshAccessButton: document.querySelector("#refreshAccessButton"),
+  billingMessage: document.querySelector("#billingMessage"),
+  profileSettingsForm: document.querySelector("#profileSettingsForm"),
+  profileDisplayName: document.querySelector("#profileDisplayName"),
+  profileDefaultQuality: document.querySelector("#profileDefaultQuality"),
+  profileDefaultRoute: document.querySelector("#profileDefaultRoute"),
+  profileAutoSave: document.querySelector("#profileAutoSave"),
+  profileSettingsMessage: document.querySelector("#profileSettingsMessage"),
+  saveCaptionProfileButton: document.querySelector("#saveCaptionProfileButton"),
+  savedProfilesList: document.querySelector("#savedProfilesList"),
+  savedProfilesMessage: document.querySelector("#savedProfilesMessage"),
   captionVideoInput: document.querySelector("#captionVideoInput"),
   captionVideoName: document.querySelector("#captionVideoName"),
   captionVideoDropIcon: document.querySelector(".captions-dropzone .drop-icon"),
@@ -167,6 +206,33 @@ const els = {
 };
 
 const ffmpeg = new FFmpeg();
+const LOCAL_STORAGE_KEYS = Object.freeze({
+  workspaceDefaults: "video-wizard.workspace-defaults.v1",
+  localProfile: "video-wizard.local-profile.v1",
+  savedProfiles: "video-wizard.saved-profiles.v1",
+  accessCache: "video-wizard.access-cache.v1",
+});
+const PREMIUM_GATES = Object.freeze({
+  slideshowHighQuality: "slideshowHighQuality",
+  captionBurnedVideo: "captionBurnedVideo",
+  captionEdlPackage: "captionEdlPackage",
+});
+const DEFAULT_APP_CONFIG = Object.freeze({
+  supabaseUrl: "https://ysnyzvpkazggvxewsgzn.supabase.co",
+  supabaseAnonKey: "sb_publishable_9IuEfQdN5MhqPuZm4dAP3w_Jph0e1_k",
+  paddleClientToken: "",
+  paddleEnvironment: "sandbox",
+  paddlePriceId: "",
+  paddleSuccessUrl: "",
+  paddleCancelUrl: "",
+  billingPortalUrl: "",
+  premiumPlanName: "Video Wizard Pro",
+  premiumFeatures: [
+    "1080p slideshow exports",
+    "Burned-in caption video export",
+    "EDL + PNG caption package",
+  ],
+});
 const state = {
   loaded: false,
   photos: [],
@@ -219,6 +285,16 @@ const state = {
   suppressCaptionEditorCursorActivity: false,
   captionPreviewWindow: null,
   captionPreviewZoomSeconds: null,
+  account: {
+    config: null,
+    supabase: null,
+    session: null,
+    status: null,
+    savedProfiles: [],
+    localProfile: null,
+    authReady: false,
+    isStaticFallback: false,
+  },
 };
 
 const transitionMap = {
@@ -235,25 +311,80 @@ const qualityPresets = {
 
 const routes = {
   "/": {
+    key: "home",
+    title: "Video Wizard",
+    page: els.homePage,
+    help: {
+      title: "Start here",
+      steps: [
+        "Pick a tool card to jump into a workflow.",
+        "Use the freebie area for future lead magnets or email capture.",
+      ],
+      footer: "Everything here is meant to feel lightweight and browser-first.",
+    },
+  },
+  "/slideshow": {
     key: "slideshow",
     title: "Slideshow Generator",
     page: els.slideshowPage,
+    help: {
+      title: "Slideshow workflow",
+      steps: [
+        "Add photos and reorder them by dragging.",
+        "Adjust music, timing, transitions, and format in Settings.",
+        "Check the Preview, then Generate when the pacing feels right.",
+      ],
+      footer: "Exports happen locally in your browser after you choose a save location.",
+    },
   },
   "/captions": {
     key: "captions",
     title: "Captions",
     page: els.captionsPage,
+    help: {
+      title: "Captions workflow",
+      steps: [
+        "Add a local video and wait for the browser transcription pass.",
+        "Edit caption text, timing, and styling directly in the tool.",
+        "Preview the result, then export video, SRT, or EDL plus PNG.",
+      ],
+      footer: "No cloud upload: caption work stays inside your browser session.",
+    },
+  },
+  "/settings": {
+    key: "settings",
+    title: "Settings",
+    page: els.settingsPage,
+    help: {
+      title: "Settings overview",
+      steps: [
+        "Use this page to shape future presets, saved profiles, and account ideas.",
+        "Think of it as the long-term control room for the whole suite.",
+      ],
+      footer: "This is still a draft space, so it is a good place to keep brainstorming product ideas.",
+    },
   },
 };
 
 populateCaptionFontFamilyOptions();
 syncCaptionFontWeightOptions(DEFAULT_CAPTION_FONT_WEIGHT);
 
+els.homeMenuButton.addEventListener("click", toggleHomeMenu);
+els.homeMenu.addEventListener("click", handleHomeMenuClick);
 els.brandMenuButton.addEventListener("click", toggleBrandMenu);
 els.brandMenu.addEventListener("click", handleBrandMenuClick);
-els.captionHelpButton.addEventListener("click", toggleCaptionHelp);
+document.querySelectorAll("[data-path], [data-external-url]").forEach((element) => {
+  element.addEventListener("click", () => handleCardNavigation(element));
+  if (!["BUTTON", "A"].includes(element.tagName)) {
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleCardNavigation(element);
+    });
+  }
+});
+document.addEventListener("click", closeHomeMenuOnOutsideClick);
 document.addEventListener("click", closeBrandMenuOnOutsideClick);
-document.addEventListener("click", closeCaptionHelpOnOutsideClick);
 document.addEventListener("keydown", handleGlobalKeydown);
 window.addEventListener("popstate", renderRoute);
 window.addEventListener("resize", () => {
@@ -370,6 +501,16 @@ els.qualityRange.addEventListener("input", handleSettingsChange);
 els.photoInput.addEventListener("change", handlePhotos);
 els.audioInput.addEventListener("change", handleAudio);
 els.generateButton.addEventListener("click", generateSlideshow);
+els.authForm.addEventListener("submit", handleSignInSubmit);
+els.signUpButton.addEventListener("click", handleSignUpClick);
+els.signOutButton.addEventListener("click", handleSignOutClick);
+els.upgradeButton.addEventListener("click", handleUpgradeClick);
+els.manageBillingButton.addEventListener("click", handleManageBillingClick);
+els.refreshAccessButton.addEventListener("click", () => {
+  void refreshAccountStatus({ force: true, messageTarget: "billing" });
+});
+els.profileSettingsForm.addEventListener("submit", handleProfileSettingsSubmit);
+els.saveCaptionProfileButton.addEventListener("click", handleSaveCurrentCaptionProfile);
 els.trashDrop.addEventListener("dragover", handleTrashDragOver);
 els.trashDrop.addEventListener("dragleave", handleTrashDragLeave);
 els.trashDrop.addEventListener("drop", handleTrashDrop);
@@ -390,6 +531,37 @@ setCaptionTextBoxMode(els.captionTextBox.value || "none");
 setCaptionParagraphAlign(els.captionParagraphAlign.value || "center");
 ensureCaptionFontReady();
 renderRoute();
+void initAccountSystem();
+
+function toggleHomeMenu(event) {
+  event.stopPropagation();
+  els.homeMenuButton.classList.remove("is-jittering");
+  void els.homeMenuButton.offsetWidth;
+  els.homeMenuButton.classList.add("is-jittering");
+  setHomeMenuOpen(els.homeMenu.hidden);
+}
+
+function setHomeMenuOpen(isOpen) {
+  els.homeMenu.hidden = !isOpen;
+  els.homeMenuButton.setAttribute("aria-expanded", String(isOpen));
+  if (isOpen) {
+    setBrandMenuOpen(false);
+  }
+}
+
+function handleHomeMenuClick(event) {
+  const link = event.target.closest("a[data-route]");
+  if (!link) return;
+  event.preventDefault();
+  navigateToPath(new URL(link.href).pathname);
+  setHomeMenuOpen(false);
+}
+
+function closeHomeMenuOnOutsideClick(event) {
+  if (els.homeMenu.hidden) return;
+  if (event.target.closest(".brand-home-nav")) return;
+  setHomeMenuOpen(false);
+}
 
 function toggleBrandMenu(event) {
   event.stopPropagation();
@@ -402,6 +574,8 @@ function toggleBrandMenu(event) {
 function setBrandMenuOpen(isOpen) {
   els.brandMenu.hidden = !isOpen;
   els.brandMenuButton.setAttribute("aria-expanded", String(isOpen));
+  if (isOpen) setHomeMenuOpen(false);
+  if (!isOpen) resetUtilityMenuPanels();
 }
 
 function closeBrandMenuOnOutsideClick(event) {
@@ -412,8 +586,8 @@ function closeBrandMenuOnOutsideClick(event) {
 
 function handleGlobalKeydown(event) {
   if (event.key === "Escape") {
+    setHomeMenuOpen(false);
     setBrandMenuOpen(false);
-    closeCaptionHelp();
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && shouldHandleCaptionUndo(event.target)) {
     event.preventDefault();
@@ -422,15 +596,43 @@ function handleGlobalKeydown(event) {
 }
 
 function handleBrandMenuClick(event) {
-  const link = event.target.closest("a[data-route]");
-  if (!link) return;
-  event.preventDefault();
-  const url = new URL(link.href);
-  if (url.pathname !== window.location.pathname) {
-    history.pushState({}, "", url.pathname);
+  const pathButton = event.target.closest("[data-path]");
+  if (pathButton) {
+    navigateToPath(pathButton.dataset.path || "/");
+    setBrandMenuOpen(false);
+    return;
+  }
+  const actionButton = event.target.closest("[data-menu-action]");
+  if (!actionButton) return;
+  const action = actionButton.dataset.menuAction;
+  if (action === "help") {
+    toggleUtilityHelp();
+    return;
+  }
+  if (action === "logout") {
+    if (!getCurrentUser()) {
+      navigateToPath("/settings");
+      showUtilityMenuStatus("Sign in from Settings to unlock account features.");
+      return;
+    }
+    void handleSignOutClick();
+    showUtilityMenuStatus("Signed out.");
+  }
+}
+
+function navigateToPath(pathname) {
+  if (pathname !== window.location.pathname) {
+    history.pushState({}, "", pathname);
   }
   renderRoute();
-  setBrandMenuOpen(false);
+}
+
+function handleCardNavigation(element) {
+  if (element.dataset.externalUrl) {
+    window.location.href = element.dataset.externalUrl;
+    return;
+  }
+  navigateToPath(element.dataset.path || "/");
 }
 
 function renderRoute() {
@@ -439,32 +641,674 @@ function renderRoute() {
     item.page.hidden = item.key !== route.key;
   });
   els.appTitle.textContent = route.title;
-  els.captionHelp.hidden = route.key !== "captions";
-  if (route.key !== "captions") closeCaptionHelp();
-  document.title = `Video Wizard ${route.title}`;
-  els.brandMenu
+  populateUtilityHelp(route.help);
+  resetUtilityMenuPanels();
+  document.title = route.key === "home" ? "Video Wizard" : `Video Wizard | ${route.title}`;
+  els.homeMenu
     .querySelectorAll("a[data-route]")
     .forEach((link) => {
       link.setAttribute("aria-current", link.dataset.route === route.key ? "page" : "false");
     });
 }
 
-function toggleCaptionHelp(event) {
-  event.stopPropagation();
-  const shouldOpen = els.captionHelpPopover.hidden;
-  els.captionHelpPopover.hidden = !shouldOpen;
-  els.captionHelpButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+function populateUtilityHelp(help = {}) {
+  const { title = "Help", steps = [], footer = "" } = help;
+  els.utilityHelpTitle.textContent = title;
+  els.utilityHelpList.innerHTML = steps.map((step) => `<li>${step}</li>`).join("");
+  els.utilityHelpFooter.textContent = footer;
 }
 
-function closeCaptionHelp() {
-  els.captionHelpPopover.hidden = true;
-  els.captionHelpButton.setAttribute("aria-expanded", "false");
+function toggleUtilityHelp() {
+  const shouldOpen = els.utilityHelpPanel.hidden;
+  els.utilityHelpPanel.hidden = !shouldOpen;
+  if (shouldOpen) {
+    els.utilityMenuStatus.hidden = true;
+    els.utilityMenuStatus.textContent = "";
+  }
 }
 
-function closeCaptionHelpOnOutsideClick(event) {
-  if (els.captionHelp.hidden || els.captionHelpPopover.hidden) return;
-  if (event.target.closest("#captionHelp")) return;
-  closeCaptionHelp();
+function showUtilityMenuStatus(message) {
+  els.utilityMenuStatus.textContent = message;
+  els.utilityMenuStatus.hidden = false;
+  els.utilityHelpPanel.hidden = true;
+}
+
+function resetUtilityMenuPanels() {
+  els.utilityHelpPanel.hidden = true;
+  els.utilityMenuStatus.hidden = true;
+  els.utilityMenuStatus.textContent = "";
+}
+
+async function initAccountSystem() {
+  restoreWorkspaceDefaults();
+  restoreLocalProfile();
+  restoreSavedProfiles();
+  renderSavedProfiles();
+  renderAccountState();
+
+  state.account.config = await fetchAppConfig();
+
+  populateBillingFeatureLabel();
+  applyLocalProfileDefaults();
+  renderAccountState();
+
+  if (state.account.config.supabaseUrl && state.account.config.supabaseAnonKey) {
+    await initializeSupabase();
+  } else {
+    setAuthMessage("Supabase is not configured yet. Add the public project keys to enable login.");
+  }
+
+  initPaddleBilling();
+  if (state.account.supabase) {
+    await refreshAccountStatus({ force: true });
+  }
+}
+
+async function fetchAppConfig() {
+  try {
+    const response = await fetch("/api/app-config", { headers: { Accept: "application/json" } });
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !contentType.includes("application/json")) {
+      throw new Error(`Config request failed with ${response.status || "unknown status"}.`);
+    }
+    state.account.isStaticFallback = false;
+    const remoteConfig = await response.json();
+    return mergeAppConfig(remoteConfig);
+  } catch (_error) {
+    state.account.isStaticFallback = true;
+    return mergeAppConfig();
+  }
+}
+
+function mergeAppConfig(remoteConfig = {}) {
+  const merged = { ...DEFAULT_APP_CONFIG };
+  Object.entries(remoteConfig || {}).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
+    if (typeof value === "string" && !value.trim()) return;
+    merged[key] = value;
+  });
+  return merged;
+}
+
+async function initializeSupabase() {
+  try {
+    const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm");
+    state.account.supabase = createClient(
+      state.account.config.supabaseUrl,
+      state.account.config.supabaseAnonKey,
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      },
+    );
+
+    const { data, error } = await state.account.supabase.auth.getSession();
+    if (error) throw error;
+    state.account.session = data.session;
+    state.account.authReady = true;
+    state.account.supabase.auth.onAuthStateChange((_event, session) => {
+      state.account.session = session;
+      void refreshAccountStatus({ force: true });
+      renderAccountState();
+    });
+  } catch (error) {
+    setAuthMessage(`Supabase failed to initialize. ${normalizeError(error)}`);
+  }
+}
+
+function initPaddleBilling() {
+  const paddle = window.Paddle;
+  const config = state.account.config;
+  if (!paddle || !config?.paddleClientToken) return;
+  try {
+    paddle.Environment?.set(config.paddleEnvironment === "production" ? "production" : "sandbox");
+    paddle.Initialize({
+      token: config.paddleClientToken,
+      eventCallback: (event) => {
+        if (event?.name === "checkout.completed") {
+          setBillingMessage("Checkout completed. Refreshing access…");
+          void refreshAccountStatus({ force: true, messageTarget: "billing" });
+        }
+      },
+    });
+  } catch (error) {
+    setBillingMessage(`Paddle setup failed. ${normalizeError(error)}`);
+  }
+}
+
+function getCurrentUser() {
+  return state.account.session?.user || null;
+}
+
+function getCurrentUserId() {
+  return getCurrentUser()?.id || "";
+}
+
+function getCurrentUserEmail() {
+  return getCurrentUser()?.email || "";
+}
+
+function getDefaultAccountStatus() {
+  return {
+    user_id: "",
+    email: "",
+    plan_name: "Free",
+    billing_status: "free",
+    premium_access: false,
+    premium_features: [],
+  };
+}
+
+async function refreshAccountStatus({ force = false, messageTarget = "auth" } = {}) {
+  const user = getCurrentUser();
+  const cache = readLocalJson(LOCAL_STORAGE_KEYS.accessCache, null);
+
+  if (state.account.isStaticFallback || !state.account.supabase) {
+    state.account.status = getDefaultAccountStatus();
+    applyPremiumAccessState();
+    renderAccountState();
+    return state.account.status;
+  }
+
+  if (!user) {
+    state.account.status = getDefaultAccountStatus();
+    if (cache?.guest) {
+      state.account.status = { ...state.account.status, ...cache.guest };
+    }
+    applyPremiumAccessState();
+    renderAccountState();
+    return state.account.status;
+  }
+
+  const shouldUseCache = !force && cache?.user_id === user.id && cache?.status;
+  if (shouldUseCache) {
+    state.account.status = cache.status;
+    applyPremiumAccessState();
+    renderAccountState();
+  }
+
+  try {
+    const response = await fetch("/api/account/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: user.id,
+        email: user.email || "",
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Account status request failed with ${response.status}.`);
+    }
+    const status = await response.json();
+    state.account.status = status;
+    writeLocalJson(LOCAL_STORAGE_KEYS.accessCache, {
+      user_id: user.id,
+      status,
+      synced_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    if (!state.account.status) {
+      state.account.status = shouldUseCache ? cache.status : getDefaultAccountStatus();
+    }
+    if (messageTarget === "billing") {
+      setBillingMessage(`Using cached access state. ${normalizeError(error)}`);
+    } else {
+      setAuthMessage(`Using cached access state. ${normalizeError(error)}`);
+    }
+  }
+
+  applyPremiumAccessState();
+  renderAccountState();
+  return state.account.status;
+}
+
+function hasPremiumAccess() {
+  if (state.account.isStaticFallback) return true;
+  return Boolean(state.account.status?.premium_access);
+}
+
+function isFeatureAllowed(feature) {
+  if (feature === PREMIUM_GATES.slideshowHighQuality) {
+    return hasPremiumAccess();
+  }
+  if (feature === PREMIUM_GATES.captionBurnedVideo || feature === PREMIUM_GATES.captionEdlPackage) {
+    return hasPremiumAccess();
+  }
+  return true;
+}
+
+function applyPremiumAccessState() {
+  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
+    els.qualityRange.value = "2";
+  }
+  updateQualityLabel();
+  updateCaptionActionAvailability();
+}
+
+function renderAccountState() {
+  const user = getCurrentUser();
+  const status = state.account.status || getDefaultAccountStatus();
+  const email = user?.email || state.account.localProfile?.email || "Browser guest";
+  const premium = Boolean(status.premium_access);
+  const planName = status.plan_name || (premium ? "Premium" : "Free");
+  const billingStatus = humanizeBillingStatus(status.billing_status);
+
+  if (user?.email) {
+    els.authEmail.value = user.email;
+  }
+  els.accountStatusChip.textContent = user ? "Signed in" : "Guest";
+  els.accountAuthStatus.textContent = user ? "Signed in" : "Not signed in";
+  els.accountUserEmail.textContent = email;
+  els.accountPlanName.textContent = planName;
+  els.accountPlanBadge.hidden = false;
+  els.accountPlanBadgeLabel.textContent = premium ? planName : "Free";
+  els.billingStatusChip.textContent = premium ? "Premium" : "Free";
+  els.billingPlanLabel.textContent = planName;
+  els.billingStatusLabel.textContent = billingStatus;
+  els.billingSummary.textContent = state.account.isStaticFallback
+    ? "Billing is not connected yet."
+    : premium
+      ? "Premium access is active."
+      : "No active subscription.";
+  els.manageBillingButton.disabled = state.account.isStaticFallback || !state.account.config?.billingPortalUrl;
+  els.refreshAccessButton.disabled = state.account.isStaticFallback;
+  els.signInButton.disabled = !state.account.supabase;
+  els.signUpButton.disabled = !state.account.supabase;
+  els.signOutButton.disabled = !state.account.supabase || !user;
+  els.upgradeButton.disabled = state.account.isStaticFallback || !state.account.config?.paddlePriceId;
+  if (els.logoutMenuAction) {
+    els.logoutMenuAction.textContent = state.account.isStaticFallback ? "Account setup soon" : (user ? "Log out" : "Sign in required");
+  }
+  populateBillingFeatureLabel();
+  if (state.account.isStaticFallback) {
+    if (!state.account.supabase) {
+      setAuthMessage("Sign-in is not available right now.");
+    } else if (!user) {
+      setAuthMessage("Enter your email and password to sign in.");
+    }
+    setBillingMessage("");
+  }
+  updateQualityLabel();
+}
+
+function humanizeBillingStatus(value) {
+  const normalized = String(value || "free").replaceAll("_", " ");
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function populateBillingFeatureLabel() {
+  if (!els.billingFeatureLabel) return;
+  const features = state.account.config?.premiumFeatures || [];
+  els.billingFeatureLabel.textContent = features.join(", ");
+}
+
+function setAuthMessage(message = "") {
+  els.authMessage.textContent = message;
+}
+
+function setBillingMessage(message = "") {
+  if (els.billingMessage) els.billingMessage.textContent = message;
+}
+
+function setProfileSettingsMessage(message = "") {
+  els.profileSettingsMessage.textContent = message;
+}
+
+function setSavedProfilesMessage(message = "") {
+  els.savedProfilesMessage.textContent = message;
+}
+
+async function handleSignInSubmit(event) {
+  event.preventDefault();
+  const supabase = state.account.supabase;
+  if (!supabase) {
+    setAuthMessage("Supabase login is not configured yet.");
+    return;
+  }
+  const email = els.authEmail.value.trim();
+  const password = els.authPassword.value;
+  if (!email || !password) {
+    setAuthMessage("Enter an email and password first.");
+    return;
+  }
+  setAuthMessage("Signing in…");
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    setAuthMessage(normalizeError(error));
+    return;
+  }
+  els.authPassword.value = "";
+  setAuthMessage("Signed in.");
+}
+
+async function handleSignUpClick() {
+  const supabase = state.account.supabase;
+  if (!supabase) {
+    setAuthMessage("Supabase signup is not configured yet.");
+    return;
+  }
+  const email = els.authEmail.value.trim();
+  const password = els.authPassword.value;
+  if (!email || !password) {
+    setAuthMessage("Enter an email and password first.");
+    return;
+  }
+  setAuthMessage("Creating account…");
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) {
+    setAuthMessage(normalizeError(error));
+    return;
+  }
+  els.authPassword.value = "";
+  setAuthMessage(data.session ? "Account created and signed in." : "Account created. Check your email if confirmation is enabled.");
+}
+
+async function handleSignOutClick() {
+  const supabase = state.account.supabase;
+  if (!supabase) {
+    setAuthMessage("No Supabase session is active.");
+    return;
+  }
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    setAuthMessage(normalizeError(error));
+    return;
+  }
+  state.account.status = getDefaultAccountStatus();
+  applyPremiumAccessState();
+  renderAccountState();
+  setAuthMessage("Signed out.");
+}
+
+function handleUpgradeClick() {
+  const config = state.account.config;
+  const user = getCurrentUser();
+  if (!config?.paddlePriceId) {
+    setBillingMessage("Add `PADDLE_PRICE_ID` and `PADDLE_CLIENT_TOKEN` to enable checkout.");
+    return;
+  }
+  if (!user) {
+    setBillingMessage("Sign in first so the purchase can be attached to a user.");
+    navigateToPath("/settings");
+    return;
+  }
+  if (!window.Paddle?.Checkout?.open) {
+    setBillingMessage("Paddle checkout is not available yet.");
+    return;
+  }
+  setBillingMessage("");
+  window.Paddle.Checkout.open({
+    items: [{ priceId: config.paddlePriceId, quantity: 1 }],
+    customer: { email: user.email || "" },
+    settings: {
+      displayMode: "overlay",
+      successUrl: config.paddleSuccessUrl || window.location.href,
+    },
+    customData: {
+      supabase_user_id: user.id,
+      supabase_email: user.email || "",
+    },
+  });
+}
+
+function handleManageBillingClick() {
+  const url = state.account.config?.billingPortalUrl;
+  if (!url) {
+    setBillingMessage("Set `PADDLE_BILLING_PORTAL_URL` to link a billing management page.");
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+
+function handleProfileSettingsSubmit(event) {
+  event.preventDefault();
+  saveLocalProfileFromForm();
+  setProfileSettingsMessage("Local defaults saved in this browser.");
+}
+
+function getDefaultLocalProfile() {
+  return {
+    displayName: "",
+    defaultQuality: "2",
+    defaultRoute: "/",
+    autoSave: true,
+  };
+}
+
+function restoreLocalProfile() {
+  state.account.localProfile = {
+    ...getDefaultLocalProfile(),
+    ...readLocalJson(LOCAL_STORAGE_KEYS.localProfile, {}),
+  };
+  els.profileDisplayName.value = state.account.localProfile.displayName || "";
+  els.profileDefaultQuality.value = state.account.localProfile.defaultQuality || "2";
+  els.profileDefaultRoute.value = state.account.localProfile.defaultRoute || "/";
+  els.profileAutoSave.checked = state.account.localProfile.autoSave !== false;
+}
+
+function saveLocalProfileFromForm() {
+  state.account.localProfile = {
+    displayName: els.profileDisplayName.value.trim(),
+    defaultQuality: els.profileDefaultQuality.value,
+    defaultRoute: els.profileDefaultRoute.value,
+    autoSave: els.profileAutoSave.checked,
+  };
+  writeLocalJson(LOCAL_STORAGE_KEYS.localProfile, state.account.localProfile);
+  applyLocalProfileDefaults();
+  renderAccountState();
+}
+
+function applyLocalProfileDefaults() {
+  const profile = state.account.localProfile || getDefaultLocalProfile();
+  if (profile.defaultQuality) {
+    els.profileDefaultQuality.value = profile.defaultQuality;
+    if (state.account.localProfile?.autoSave === false) {
+      els.qualityRange.value = profile.defaultQuality;
+    }
+  }
+  if (profile.defaultRoute && profile.defaultRoute !== "/" && window.location.pathname === "/") {
+    navigateToPath(profile.defaultRoute);
+  }
+}
+
+function getDefaultWorkspaceDefaults() {
+  return {
+    slideshow: {
+      durationRange: "5",
+      transitionDuration: "1",
+      qualityRange: "2",
+      loopCountRange: "0",
+      kenBurnsToggle: true,
+      fillBackgroundToggle: true,
+      orientation: "horizontal",
+      transition: "fade",
+    },
+    captions: {
+      captionFont: DEFAULT_CAPTION_FONT,
+      captionFontWeight: DEFAULT_CAPTION_FONT_WEIGHT,
+      captionFontSize: "50",
+      captionParagraphAlign: "center",
+      captionColor: "#ffffff",
+      captionStrokeEnabled: true,
+      captionStroke: "6",
+      captionStrokeColor: "#000000",
+      captionDropShadowEnabled: false,
+      captionDropShadow: "4",
+      captionDropShadowColor: "#000000",
+      captionTracking: "0",
+      captionLeading: "0",
+      captionTextBox: "none",
+      captionTextBoxColor: "#000000",
+      captionTextBoxOpacity: "72",
+      captionTextBoxRoundness: "18",
+      captionTextBoxPadding: "30",
+      captionLength: "28",
+      captionLines: "2",
+    },
+  };
+}
+
+function restoreWorkspaceDefaults() {
+  const saved = readLocalJson(LOCAL_STORAGE_KEYS.workspaceDefaults, {});
+  const defaults = getDefaultWorkspaceDefaults();
+  applyControlValues(saved.slideshow || defaults.slideshow);
+  applyControlValues(saved.captions || defaults.captions);
+}
+
+function persistWorkspaceDefaults() {
+  if (state.account.localProfile?.autoSave === false) return;
+  writeLocalJson(LOCAL_STORAGE_KEYS.workspaceDefaults, {
+    slideshow: getSlideshowSettingsSnapshot(),
+    captions: getCaptionSettingsSnapshot(),
+  });
+}
+
+function getSlideshowSettingsSnapshot() {
+  return {
+    durationRange: els.durationRange.value,
+    transitionDuration: els.transitionDuration.value,
+    qualityRange: els.qualityRange.value,
+    loopCountRange: els.loopCountRange.value,
+    kenBurnsToggle: els.kenBurnsToggle.checked,
+    fillBackgroundToggle: els.fillBackgroundToggle.checked,
+    orientation: document.querySelector("input[name='orientation']:checked")?.value || "horizontal",
+    transition: document.querySelector("input[name='transition']:checked")?.value || "fade",
+  };
+}
+
+function applyControlValues(values = {}) {
+  Object.entries(values).forEach(([key, value]) => {
+    const input = els[key];
+    if (input) {
+      if (input.type === "checkbox") {
+        input.checked = Boolean(value);
+      } else {
+        input.value = String(value);
+      }
+      return;
+    }
+    if (key === "orientation" || key === "transition") {
+      const radio = document.querySelector(`input[name='${key}'][value='${value}']`);
+      if (radio) radio.checked = true;
+    }
+  });
+}
+
+function restoreSavedProfiles() {
+  state.account.savedProfiles = readLocalJson(LOCAL_STORAGE_KEYS.savedProfiles, []);
+}
+
+function persistSavedProfiles() {
+  writeLocalJson(LOCAL_STORAGE_KEYS.savedProfiles, state.account.savedProfiles);
+}
+
+function handleSaveCurrentCaptionProfile() {
+  const name = window.prompt("Name this caption preset:", "");
+  if (!name) return;
+  const now = new Date().toISOString();
+  state.account.savedProfiles.unshift({
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    type: "caption",
+    createdAt: now,
+    updatedAt: now,
+    settings: getCaptionSettingsSnapshot(),
+  });
+  state.account.savedProfiles = state.account.savedProfiles.slice(0, 24);
+  persistSavedProfiles();
+  renderSavedProfiles();
+  setSavedProfilesMessage("Preset saved locally.");
+}
+
+function renderSavedProfiles() {
+  const profiles = state.account.savedProfiles || [];
+  if (!profiles.length) {
+    els.savedProfilesList.innerHTML = `
+      <div class="profile-row muted">
+        <div>
+          <strong>No saved profiles yet</strong>
+          <span>Store caption presets locally so users can jump back into their favorite look fast.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  els.savedProfilesList.innerHTML = profiles.map((profile) => `
+    <div class="profile-row">
+      <div>
+        <strong>${escapeHtml(profile.name)}</strong>
+        <span>${formatSavedProfileSummary(profile)}</span>
+      </div>
+      <div class="profile-row-actions">
+        <button class="ghost-action" type="button" data-profile-action="load" data-profile-id="${profile.id}">Load</button>
+        <button class="ghost-action" type="button" data-profile-action="delete" data-profile-id="${profile.id}">Delete</button>
+      </div>
+    </div>
+  `).join("");
+  els.savedProfilesList.querySelectorAll("[data-profile-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.profileAction;
+      const profileId = button.dataset.profileId;
+      if (action === "load") {
+        loadSavedProfile(profileId);
+        return;
+      }
+      if (action === "delete") {
+        deleteSavedProfile(profileId);
+      }
+    });
+  });
+}
+
+function formatSavedProfileSummary(profile) {
+  const settings = profile.settings || {};
+  const font = settings.captionFont || settings.font || DEFAULT_CAPTION_FONT;
+  const size = settings.captionFontSize || settings.fontSize || "50";
+  const lines = settings.captionLines || "2";
+  return `${font} · ${size}px · ${lines} lines`;
+}
+
+function loadSavedProfile(profileId) {
+  const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
+  if (!profile) return;
+  applyCaptionSettingsSnapshot(profile.settings);
+  persistWorkspaceDefaults();
+  setSavedProfilesMessage(`Loaded “${profile.name}”.`);
+}
+
+function deleteSavedProfile(profileId) {
+  state.account.savedProfiles = (state.account.savedProfiles || []).filter((item) => item.id !== profileId);
+  persistSavedProfiles();
+  renderSavedProfiles();
+  setSavedProfilesMessage("Preset removed.");
+}
+
+function readLocalJson(key, fallback) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function writeLocalJson(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (_error) {
+    // Ignore storage failures so the editor still works in private or restricted contexts.
+  }
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function hasCaptionWorkInProgress() {
@@ -1006,6 +1850,7 @@ async function createCaptionRenderJob({ silent = false, token = state.captionAna
 }
 
 async function prepareCaptionCutPoints(options = {}) {
+  if (state.account.isStaticFallback) return;
   if (!state.captionVideo || state.captionCutPoints.length) return;
   try {
     await createCaptionRenderJob(options);
@@ -1091,6 +1936,11 @@ function seekVideo(video, time) {
 }
 
 async function renderCaptionedVideo() {
+  if (!isFeatureAllowed(PREMIUM_GATES.captionBurnedVideo)) {
+    setCaptionStatus("Burned-in caption video export is part of the premium plan.");
+    navigateToPath("/settings");
+    return;
+  }
   if (!state.captionVideo || state.captions.length === 0) {
     setCaptionStatus("Transcribe a video before exporting.");
     return;
@@ -1640,6 +2490,7 @@ function makeEven(value) {
 
 function handleCaptionSettingsChange() {
   updateCaptionSettingsLabels();
+  persistWorkspaceDefaults();
   if (!state.captionTranscript?.words?.length) return;
   remapEditorToTimedCaptions();
   updateCaptionOverlay();
@@ -1647,6 +2498,7 @@ function handleCaptionSettingsChange() {
 
 function handleCaptionLayoutChange() {
   updateCaptionSettingsLabels();
+  persistWorkspaceDefaults();
   if (!state.captionTranscript?.words?.length) return;
   regenerateCaptionLayoutFromEditor();
   updateCaptionOverlay();
@@ -1654,6 +2506,7 @@ function handleCaptionLayoutChange() {
 
 function handleCaptionStyleChange() {
   updateCaptionSettingsLabels();
+  persistWorkspaceDefaults();
   ensureCaptionFontReady(els.captionFont.value, els.captionFontWeight.value);
   updateCaptionOverlay();
 }
@@ -4031,9 +4884,14 @@ function estimateCaptionAnalysisDuration(metadata) {
 }
 
 function updateCaptionActionAvailability(isBusy = false) {
-  els.renderCaptionsButton.disabled = isBusy || state.captions.length === 0;
+  const hasCaptions = state.captions.length > 0;
+  const canRenderVideo = hasCaptions && isFeatureAllowed(PREMIUM_GATES.captionBurnedVideo);
+  const canExportEdl = hasCaptions && isFeatureAllowed(PREMIUM_GATES.captionEdlPackage);
+  els.renderCaptionsButton.disabled = isBusy || !canRenderVideo;
   els.exportSrtButton.disabled = isBusy || state.captions.length === 0;
-  els.exportEdlPngButton.disabled = isBusy || state.captions.length === 0;
+  els.exportEdlPngButton.disabled = isBusy || !canExportEdl;
+  els.renderCaptionsButton.textContent = hasPremiumAccess() ? "Video" : "Video · Premium";
+  els.exportEdlPngButton.textContent = hasPremiumAccess() ? "EDL + PNG" : "EDL + PNG · Premium";
 }
 
 function setCaptionDiagnostics(message) {
@@ -4092,6 +4950,11 @@ function exportCaptionSrt() {
 }
 
 async function exportCaptionEdlPng() {
+  if (!isFeatureAllowed(PREMIUM_GATES.captionEdlPackage)) {
+    setCaptionStatus("EDL + PNG export is part of the premium plan.");
+    navigateToPath("/settings");
+    return;
+  }
   if (!state.captions.length) {
     setCaptionStatus("Transcribe a video before exporting EDL + PNG.");
     return;
@@ -4486,19 +5349,29 @@ function computeCrc32(bytes) {
 }
 
 function updateTimingLabels() {
+  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
+    els.qualityRange.value = "2";
+    setStatus("High 1080p export is part of the premium plan.");
+  }
   els.durationValue.textContent = `${Number(els.durationRange.value).toFixed(1)}s`;
   els.transitionDurationValue.textContent = `${Number(els.transitionDuration.value).toFixed(1)}s`;
   updateQualityLabel();
   updateLoopControls();
   updateFileSizeEstimate();
   updateLivePreview();
+  persistWorkspaceDefaults();
 }
 
 function handleSettingsChange() {
+  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
+    els.qualityRange.value = "2";
+    setStatus("High 1080p export is part of the premium plan.");
+  }
   updateQualityLabel();
   updateLoopControls();
   updateFileSizeEstimate();
   updateLivePreview();
+  persistWorkspaceDefaults();
 }
 
 function updateQualityLabel() {
@@ -4837,6 +5710,13 @@ async function generateSlideshow() {
   els.settingsMenu.open = false;
   if (state.photos.length === 0) {
     setStatus("Choose at least one photo first.");
+    return;
+  }
+  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
+    els.qualityRange.value = "2";
+    updateQualityLabel();
+    setStatus("High 1080p export is part of the premium plan.");
+    navigateToPath("/settings");
     return;
   }
   if (state.currentRender?.kind === "final") return;
