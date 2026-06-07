@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Video Wizard</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260607p" />
     <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   </head>
   <body>
@@ -13,16 +13,19 @@
         <header class="masthead">
           <div class="brand">
             <div class="brand-home-nav">
-              <button
-                id="homeMenuButton"
-                class="brand-home-button"
-                type="button"
-                aria-label="Open Video Wizard tools"
-                aria-expanded="false"
-                aria-controls="homeMenu"
-              >
-                <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
-              </button>
+              <div class="brand-mark">
+                <button
+                  id="homeMenuButton"
+                  class="brand-home-button"
+                  type="button"
+                  aria-label="Open Video Wizard tools"
+                  aria-expanded="false"
+                  aria-controls="homeMenu"
+                >
+                  <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
+                </button>
+                <h1 id="app-title">Video Wizard</h1>
+              </div>
               <nav id="homeMenu" class="brand-menu home-menu" aria-label="Video Wizard tools" hidden>
                 <a href="/" data-route="home">
                   <span>Home</span>
@@ -37,38 +40,33 @@
                 </a>
               </nav>
             </div>
-            <h1 id="app-title">Video Wizard</h1>
           </div>
           <div class="masthead-actions">
-            <div id="accountPlanBadge" class="account-plan-badge" hidden>
-              <span id="accountPlanBadgeLabel">Free</span>
+            <div id="accountPlanBadge" class="account-plan-badge" hidden style="display:none;">
+              <span id="accountPlanBadgeLabel"></span>
             </div>
-            <div class="brand-nav">
+            <button id="settingsMenuAction" class="header-action subtle-action-button" type="button" data-path="/settings" hidden style="display:none;">Settings</button>
+            <button id="authMenuAction" class="header-action login-action-button" type="button">Log in</button>
+            <button id="createAccountMenuAction" class="header-action signup-action-button" type="button" data-path="/create-account" style="display:none;">Sign up</button>
+            <div class="account-menu-nav">
               <button
-                id="brandMenuButton"
-                class="utility-menu-button"
+                id="accountMenuButton"
+                class="account-menu-button"
                 type="button"
-                aria-label="Open Video Wizard menu"
+                aria-label="Open account menu"
                 aria-expanded="false"
-                aria-controls="brandMenu"
+                aria-controls="accountMenu"
+                hidden
               >
-                <span class="menu-toggle-icon" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </span>
+                <span></span>
+                <span></span>
+                <span></span>
               </button>
-              <div id="brandMenu" class="brand-menu utility-menu" aria-label="Video Wizard actions" hidden>
-                <button class="brand-menu-action" type="button" data-path="/settings">Settings</button>
-                <button class="brand-menu-action" type="button" data-menu-action="help">Help</button>
-                <button class="brand-menu-action" type="button" data-menu-action="logout">Log out</button>
-                <div id="utilityHelpPanel" class="utility-help-panel" hidden>
-                  <p id="utilityHelpTitle" class="utility-help-title"></p>
-                  <ul id="utilityHelpList" class="utility-help-list"></ul>
-                  <p id="utilityHelpFooter" class="utility-help-footer"></p>
-                </div>
-                <p id="utilityMenuStatus" class="utility-menu-status" hidden></p>
-              </div>
+              <nav id="accountMenu" class="brand-menu account-menu" aria-label="Account menu" hidden>
+                <button type="button" data-account-menu-path="/settings">Settings</button>
+                <button type="button" data-account-menu-path="/account">Account</button>
+                <button type="button" data-account-menu-action="logout">Log out</button>
+              </nav>
             </div>
           </div>
         </header>
@@ -79,16 +77,6 @@
             <br />
             <p class="home-subcopy">(made by an actual video editor)</p>
           </div>
-
-          <section class="freebie-spotlight panel" aria-labelledby="freebie-title">
-            <p class="freebie-kicker">Freebie placeholder</p>
-            <h2 id="freebie-title">Feature a popular free download here</h2>
-            <p class="freebie-copy">
-              This can become a Gumroad embed for a free template, preset, or giveaway that helps collect emails and
-              gives visitors an easy first win.
-            </p>
-            <button class="tool-card-action freebie-action" type="button">Gumroad embed goes here</button>
-          </section>
 
           <section class="tool-directory" aria-label="Video Wizard tools">
             <div class="tool-card-grid">
@@ -112,7 +100,7 @@
                 aria-label="Open Adobe Premiere MOGRTs"
               >
                 <h3>Adobe Premiere MOGRTs</h3>
-                <p>Easy-to-use, actually good, and actually useful motion graphics templates for Adobe Premiere.</p>
+                <p>Easy-to-use, actually good, actually useful templates for Premiere.</p>
                 <button class="tool-card-action" type="button" data-external-url="https://videowizard.gumroad.com/">Open</button>
               </article>
             </div>
@@ -143,27 +131,36 @@
           </section>
 
           <aside class="right-rail">
+            <section class="render-panel music-panel" aria-labelledby="music-title">
+              <div>
+                <h2 id="music-title">Music</h2>
+              </div>
+
+              <div class="rail-audio">
+                <label class="file-row" aria-label="Music file">
+                  <input id="audioInput" type="file" />
+                </label>
+              </div>
+            </section>
+
             <details id="settingsMenu" class="settings-menu">
               <summary>
                 <span>Settings</span>
-                <small>Music, timing, transitions, format</small>
+                <small>Transitions, format</small>
               </summary>
 
               <div class="settings-drawer">
-                <section class="settings-section" aria-labelledby="settings-title">
-                  <div class="panel-heading">
-                    <div>
-                      <h2 id="settings-title">Timing</h2>
-                    </div>
-                  </div>
+                <div class="settings-toolbar">
+                  <label class="settings-load-control">
+                    <span>Load profile</span>
+                    <select id="loadSlideshowSettingsSelect">
+                      <option value="">Saved slideshow profiles</option>
+                    </select>
+                  </label>
+                </div>
+                <p id="slideshowSettingsStatus" class="settings-note settings-toolbar-note" aria-live="polite"></p>
 
-                  <div class="rail-audio">
-                    <label class="file-row">
-                      <span>Music</span>
-                      <input id="audioInput" type="file" />
-                    </label>
-                  </div>
-
+                <section class="settings-section">
                   <div id="loopControls" class="loop-controls">
                     <div class="control">
                       <div class="control-label">
@@ -229,6 +226,7 @@
                     <label><input type="radio" name="transition" value="wipeleft" /> Wipe</label>
                     <label><input type="radio" name="transition" value="random" /> Random</label>
                   </fieldset>
+
                 </section>
 
               </div>
@@ -248,8 +246,36 @@
             </section>
 
             <button id="generateButton" class="generate" type="button">Generate</button>
-            <p id="outputLocation" class="output-location">Choose filename and save location when generating.</p>
+            <p id="outputLocation" class="output-location" hidden></p>
           </aside>
+        </div>
+
+        <div id="loginPage" class="page-view settings-page login-page" data-page="login" hidden>
+          <section class="login-shell" aria-label="Login">
+            <article class="panel settings-card login-card">
+              <div class="settings-card-header">
+                <div>
+                  <h3 id="authPageTitle">Log in</h3>
+                </div>
+              </div>
+              <form id="authForm" class="settings-form">
+                <label class="settings-input-row">
+                  <span>Email</span>
+                  <input id="authEmail" type="email" autocomplete="email" placeholder="editor@example.com" />
+                </label>
+                <label class="settings-input-row">
+                  <span>Password</span>
+                  <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password" />
+                </label>
+                <div class="settings-actions">
+                  <button id="signInButton" class="ghost-action" type="submit">Sign in</button>
+                  <button id="signUpButton" class="ghost-action" type="button" hidden>Create account</button>
+                  <button id="signOutButton" class="ghost-action" type="button" hidden>Sign out</button>
+                </div>
+              </form>
+              <p id="authMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+          </section>
         </div>
 
         <div id="captionsPage" class="page-view captions-page" data-page="captions" hidden>
@@ -304,9 +330,18 @@
 
           <aside class="caption-tools" aria-labelledby="caption-tools-title">
             <section class="render-panel">
-              <div>
+              <div class="tool-panel-header">
                 <h2 id="caption-tools-title">Settings</h2>
               </div>
+              <div class="settings-toolbar">
+                <label class="settings-load-control">
+                  <span>Load profile</span>
+                  <select id="loadCaptionSettingsSelect">
+                    <option value="">Saved caption profiles</option>
+                  </select>
+                </label>
+              </div>
+              <p id="captionSettingsStatus" class="settings-note settings-toolbar-note" aria-live="polite"></p>
 
               <div class="caption-settings">
                 <div class="caption-row caption-row-font">
@@ -488,150 +523,113 @@
         </div>
 
         <div id="settingsPage" class="page-view settings-page" data-page="settings" hidden>
-          <section class="panel settings-hero" aria-labelledby="settings-page-title">
-            <div>
-              <h2 id="settings-page-title">Settings</h2>
-            </div>
-            <p class="section-copy">Account, saved defaults, and caption presets.</p>
-          </section>
-
           <section class="settings-grid" aria-label="Settings overview">
-            <article class="panel settings-card">
+            <article class="panel settings-card profiles-card">
               <div class="settings-card-header">
                 <div>
-                  <p class="settings-label">Account</p>
-                  <h3>Sign in</h3>
+                  <h3>Tool profiles</h3>
                 </div>
-                <span id="accountStatusChip" class="settings-chip">Guest</span>
+                <span class="settings-chip accent">Saved</span>
               </div>
-              <div class="settings-stat-grid single-column">
-                <div class="settings-stat">
-                  <span>Auth status</span>
-                  <strong id="accountAuthStatus">Not signed in</strong>
-                </div>
-                <div class="settings-stat">
-                  <span>Email</span>
-                  <strong id="accountUserEmail">Browser guest</strong>
-                </div>
-                <div class="settings-stat">
-                  <span>Plan</span>
-                  <strong id="accountPlanName">Free</strong>
-                </div>
-              </div>
-              <form id="authForm" class="settings-form">
-                <label class="settings-input-row">
-                  <span>Email</span>
-                  <input id="authEmail" type="email" autocomplete="email" placeholder="editor@example.com" />
-                </label>
-                <label class="settings-input-row">
-                  <span>Password</span>
-                  <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password" />
-                </label>
-                <div class="settings-actions">
-                  <button id="signInButton" class="ghost-action" type="submit">Sign in</button>
-                  <button id="signUpButton" class="ghost-action" type="button">Create account</button>
-                  <button id="signOutButton" class="ghost-action" type="button">Sign out</button>
-                </div>
-              </form>
-              <p id="authMessage" class="settings-note" aria-live="polite"></p>
-            </article>
-
-            <article class="panel settings-card">
-              <div class="settings-card-header">
-                <div>
-                  <p class="settings-label">Access</p>
-                  <h3>Status</h3>
-                </div>
-                <span id="billingStatusChip" class="settings-chip">Free</span>
-              </div>
-              <div class="settings-stat-grid single-column">
-                <div class="settings-stat">
-                  <span>Current plan</span>
-                  <strong id="billingPlanLabel">Free</strong>
-                </div>
-                <div class="settings-stat">
-                  <span>Billing status</span>
-                  <strong id="billingStatusLabel">Not active</strong>
-                </div>
-              </div>
-              <p id="billingSummary" class="settings-note">Local exports are available in this version.</p>
-              <div class="settings-actions" hidden>
-                <button id="upgradeButton" class="ghost-action" type="button">Upgrade</button>
-                <button id="manageBillingButton" class="ghost-action" type="button">Manage billing</button>
-                <button id="refreshAccessButton" class="ghost-action" type="button">Refresh access</button>
-              </div>
-              <p id="billingMessage" class="settings-note" aria-live="polite"></p>
-            </article>
-
-            <article class="panel settings-card">
-              <div class="settings-card-header">
-                <div>
-                  <p class="settings-label">Local profile</p>
-                  <h3>Defaults</h3>
-                </div>
-                <span class="settings-chip">Local</span>
-              </div>
-              <form id="profileSettingsForm" class="settings-form">
-                <label class="settings-input-row">
-                  <span>Display name</span>
-                  <input id="profileDisplayName" type="text" maxlength="60" placeholder="Video Wizard Creator" />
-                </label>
-                <label class="settings-input-row">
-                  <span>Default slideshow quality</span>
-                  <select id="profileDefaultQuality">
-                    <option value="1">Low 360p</option>
-                    <option value="2">Medium 720p</option>
-                    <option value="3">High 1080p</option>
-                  </select>
-                </label>
-                <label class="settings-input-row">
-                  <span>Default landing page</span>
-                  <select id="profileDefaultRoute">
-                    <option value="/">Home</option>
-                    <option value="/slideshow">Slideshows</option>
-                    <option value="/captions">Captions</option>
-                    <option value="/settings">Settings</option>
-                  </select>
-                </label>
-                <label class="toggle-row compact">
-                  <span>
-                    <strong>Remember this browser</strong>
-                    <small>Restore recent settings automatically</small>
-                  </span>
-                  <input id="profileAutoSave" type="checkbox" checked />
-                </label>
-                <div class="settings-actions">
-                  <button id="saveProfileSettingsButton" class="ghost-action" type="submit">Save defaults</button>
-                </div>
-              </form>
-              <p id="profileSettingsMessage" class="settings-note" aria-live="polite"></p>
-            </article>
-
-            <article class="panel settings-card wide">
-              <div class="settings-card-header">
-                <div>
-                  <p class="settings-label">Caption presets</p>
-                  <h3>Saved presets</h3>
-                </div>
-                <div class="settings-actions inline-actions">
-                  <button id="saveCaptionProfileButton" class="ghost-action" type="button">Save current preset</button>
-                </div>
-              </div>
+              <p id="toolProfilesSummary" class="settings-note">Profiles save automatically when you render or export.</p>
               <div id="savedProfilesList" class="profile-list">
                 <div class="profile-row muted">
                   <div>
-                    <strong>No saved profiles yet</strong>
-                    <span>Saved presets will appear here.</span>
+                    <strong>None (yet)</strong>
+                    <span>Profiles will appear here.</span>
                   </div>
                 </div>
               </div>
               <p id="savedProfilesMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+
+            <article class="panel settings-card">
+              <div class="settings-card-header">
+                <div>
+                  <h3>Account</h3>
+                </div>
+              </div>
+              <div class="settings-stat-grid account-stat-grid">
+                <div class="settings-stat">
+                  <span>Plan</span>
+                  <strong id="accountPlanName">Free</strong>
+                </div>
+                <div class="settings-stat">
+                  <span>Subscription ends</span>
+                  <strong id="accountSubscriptionEnds">—</strong>
+                </div>
+                <div class="settings-stat single-span">
+                  <span>Day passes</span>
+                  <strong id="accountDayPasses">0</strong>
+                </div>
+              </div>
+              <div class="account-detail-list">
+                <section class="account-detail-card" aria-labelledby="account-email-label">
+                  <label class="settings-input-row">
+                    <span id="account-email-label">Email</span>
+                    <input id="accountNewEmail" type="email" autocomplete="email" disabled readonly />
+                  </label>
+                  <p id="accountEmailConfirmationNote" class="account-inline-note" hidden>Please confirm the email change from your inbox before signing in with the new address.</p>
+                  <div class="settings-actions">
+                    <button id="toggleEmailEditButton" class="ghost-action" type="button">Edit</button>
+                    <button id="cancelEmailEditButton" class="ghost-action subtle-action" type="button" hidden>Cancel</button>
+                  </div>
+                </section>
+                <section class="account-detail-card" aria-labelledby="account-password-label">
+                  <span id="account-password-label" class="account-detail-label">Password</span>
+                  <strong class="account-detail-value password-mask">**************</strong>
+                  <div class="settings-actions">
+                    <button id="togglePasswordEditButton" class="ghost-action" type="button">Reset</button>
+                  </div>
+                  <div id="accountPasswordEditor" class="account-inline-editor" hidden>
+                    <label class="settings-input-row">
+                      <span>New password</span>
+                      <input id="accountNewPassword" type="password" autocomplete="new-password" placeholder="New password" />
+                    </label>
+                    <div class="settings-actions">
+                      <button id="updatePasswordButton" class="ghost-action" type="button">Save</button>
+                      <button id="cancelPasswordEditButton" class="ghost-action subtle-action" type="button">Cancel</button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <p id="authMessage" class="settings-note" aria-live="polite"></p>
+            </article>
+          </section>
+        </div>
+
+        <div id="accountPage" class="page-view account-page" data-page="account" hidden>
+          <section class="account-tier-grid" aria-label="Account tiers">
+            <article class="panel account-tier-card">
+              <div class="account-tier-header">
+                <h2>Free</h2>
+                <span>$0</span>
+              </div>
+              <ul>
+                <li>Export videos up to 60 seconds</li>
+                <li>Includes Video Wizard watermark</li>
+                <li>Curated font selection</li>
+                <li>Limited render options</li>
+              </ul>
+            </article>
+
+            <article class="panel account-tier-card premium-tier-card">
+              <div class="account-tier-header">
+                <h2>Premium</h2>
+                <span>Annual</span>
+              </div>
+              <ul>
+                <li>Unlimited video length</li>
+                <li>No watermark</li>
+                <li>Upload your own fonts</li>
+                <li>Pro render options, including EDL and SRT</li>
+              </ul>
             </article>
           </section>
         </div>
       </section>
     </main>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=20260607p"></script>
   </body>
 </html>

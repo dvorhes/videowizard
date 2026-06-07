@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 ACCOUNT_STORE_PATH = DATA_DIR / "account_store.json"
+DEFAULT_SUPABASE_URL = "https://ysnyzvpkazggvxewsgzn.supabase.co"
+DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_9IuEfQdN5MhqPuZm4dAP3w_Jph0e1_k"
 FONT_PATH = ROOT / "assets/fonts/TikTok_Sans/static/TikTokSans-SemiBold.ttf"
 CAPTION_SNAP_TOLERANCE_FRAMES = 5
 CAPTION_JOIN_GAP_SECONDS = 0.5
@@ -47,6 +49,9 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
         if requested_path == "/api/account/status":
             self.send_account_status(parsed_url.query)
             return
+        if requested_path == "/api/account/tool-settings":
+            self.send_account_tool_settings(parsed_url.query)
+            return
 
         local_path = self.translate_path(requested_path)
         is_app_route = not os.path.splitext(requested_path)[1]
@@ -68,6 +73,9 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
             return
         if requested_path == "/api/account/status":
             self.update_account_status()
+            return
+        if requested_path == "/api/account/tool-settings":
+            self.update_account_tool_settings()
             return
         if requested_path == "/api/billing/webhook":
             self.handle_billing_webhook()
@@ -224,6 +232,47 @@ class SlideshowHandler(SimpleHTTPRequestHandler):
         email = payload.get("email")
         self.send_json(build_account_status_response(user_id=user_id, email=email))
 
+    def send_account_tool_settings(self, query_string=""):
+        params = parse_qs(query_string or "")
+        user_id = first_query_value(params, "user_id")
+        tool = first_query_value(params, "tool")
+        try:
+            self.send_json(build_account_tool_settings_response(user_id=user_id, tool=tool))
+        except RuntimeError as error:
+            self.send_json({"error": str(error)}, status=400)
+
+    def update_account_tool_settings(self):
+        try:
+            payload, _ = self.read_json_body()
+        except RuntimeError as error:
+            self.send_json({"error": str(error)}, status=400)
+            return
+
+        try:
+            action = str(payload.get("action") or "save").strip().lower()
+            if action == "rename":
+                self.send_json(rename_account_tool_settings_profile(
+                    user_id=payload.get("user_id"),
+                    profile_id=payload.get("profile_id"),
+                    name=payload.get("name"),
+                ))
+                return
+            if action == "delete":
+                self.send_json(delete_account_tool_settings_profile(
+                    user_id=payload.get("user_id"),
+                    profile_id=payload.get("profile_id"),
+                ))
+                return
+            self.send_json(save_account_tool_settings_profile(
+                user_id=payload.get("user_id"),
+                email=payload.get("email"),
+                tool=payload.get("tool"),
+                name=payload.get("name"),
+                settings=payload.get("settings"),
+            ))
+        except RuntimeError as error:
+            self.send_json({"error": str(error)}, status=400)
+
     def handle_billing_webhook(self):
         try:
             payload, raw_body = self.read_json_body()
@@ -292,8 +341,8 @@ def utc_now_iso():
 
 def get_public_app_config():
     return {
-        "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
-        "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
+        "supabaseUrl": os.environ.get("SUPABASE_URL", DEFAULT_SUPABASE_URL),
+        "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", DEFAULT_SUPABASE_ANON_KEY),
         "paddleClientToken": os.environ.get("PADDLE_CLIENT_TOKEN", ""),
         "paddleEnvironment": os.environ.get("PADDLE_ENV", "sandbox"),
         "paddlePriceId": os.environ.get("PADDLE_PRICE_ID", ""),
@@ -328,9 +377,12 @@ def default_account_record(user_id=None, email=None):
         "plan_name": FREE_PLAN_NAME,
         "billing_status": "free",
         "premium_access": False,
+        "subscription_ends_at": "",
+        "day_passes_remaining": 0,
         "subscription_id": "",
         "customer_id": "",
         "price_id": "",
+        "tool_settings": {},
         "updated_at": utc_now_iso(),
         "source": "local-default",
     }
@@ -371,12 +423,207 @@ def build_account_status_response(user_id=None, email=None):
         "plan_name": account.get("plan_name") or FREE_PLAN_NAME,
         "billing_status": normalize_billing_status(account.get("billing_status")),
         "premium_access": bool(account.get("premium_access")),
+        "subscription_ends_at": account.get("subscription_ends_at") or "",
+        "day_passes_remaining": int(account.get("day_passes_remaining") or 0),
         "subscription_id": account.get("subscription_id") or "",
         "customer_id": account.get("customer_id") or "",
         "price_id": account.get("price_id") or "",
         "updated_at": account.get("updated_at") or utc_now_iso(),
         "premium_features": PREMIUM_FEATURES,
     }
+
+
+def normalize_tool_name(tool):
+    value = str(tool or "").strip().lower()
+    if value not in {"slideshow", "captions"}:
+        raise RuntimeError("Unknown tool.")
+    return value
+
+
+def sanitize_tool_settings(settings):
+    if not isinstance(settings, dict):
+        raise RuntimeError("Tool settings must be a JSON object.")
+    sanitized = {}
+    for key, value in settings.items():
+        key_name = str(key).strip()
+        if not key_name:
+            continue
+        if isinstance(value, bool):
+            sanitized[key_name] = value
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            sanitized[key_name] = value
+            continue
+        if isinstance(value, str):
+            sanitized[key_name] = value[:500]
+            continue
+    return sanitized
+
+
+def default_tool_settings_name(tool_name, timestamp=None):
+    label = "Slideshow" if tool_name == "slideshow" else "Captions"
+    return f"{label} settings - {timestamp or utc_now_iso()}"
+
+
+def normalize_tool_settings_profiles(raw_tool_settings, tool_name=None):
+    profiles = []
+    if not isinstance(raw_tool_settings, dict):
+        return profiles
+
+    for stored_tool, value in raw_tool_settings.items():
+        normalized_tool = normalize_tool_name(stored_tool)
+        if tool_name and normalized_tool != tool_name:
+            continue
+        if isinstance(value, list):
+            source_profiles = value
+        elif isinstance(value, dict) and isinstance(value.get("profiles"), list):
+            source_profiles = value.get("profiles")
+        elif isinstance(value, dict) and isinstance(value.get("settings"), dict):
+            source_profiles = [{
+                "id": value.get("id") or uuid.uuid4().hex,
+                "name": value.get("name") or default_tool_settings_name(normalized_tool, value.get("updated_at")),
+                "tool": normalized_tool,
+                "created_at": value.get("created_at") or value.get("updated_at") or "",
+                "updated_at": value.get("updated_at") or "",
+                "settings": value.get("settings") or {},
+            }]
+        else:
+            source_profiles = []
+
+        for profile in source_profiles:
+            if not isinstance(profile, dict):
+                continue
+            settings = profile.get("settings") or {}
+            if not isinstance(settings, dict):
+                continue
+            timestamp = profile.get("updated_at") or profile.get("created_at") or utc_now_iso()
+            profiles.append({
+                "id": str(profile.get("id") or uuid.uuid4().hex),
+                "name": str(profile.get("name") or default_tool_settings_name(normalized_tool, timestamp))[:120],
+                "tool": normalized_tool,
+                "created_at": str(profile.get("created_at") or timestamp),
+                "updated_at": str(profile.get("updated_at") or timestamp),
+                "settings": sanitize_tool_settings(settings),
+            })
+
+    profiles.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+    return profiles
+
+
+def build_account_tool_settings_response(user_id=None, tool=None):
+    user_key = str(user_id or "").strip()
+    if not user_key:
+        raise RuntimeError("Missing user id.")
+    tool_name = normalize_tool_name(tool) if tool else None
+    store = load_account_store()
+    user_record = store["users"].get(user_key)
+    if not user_record:
+        return {
+            "user_id": user_key,
+            "tool": tool_name,
+            "profiles": [],
+            "settings": {},
+            "updated_at": "",
+        }
+    profiles = normalize_tool_settings_profiles(user_record.get("tool_settings", {}), tool_name=tool_name)
+    return {
+        "user_id": user_key,
+        "tool": tool_name,
+        "profiles": profiles,
+        "settings": profiles[0]["settings"] if profiles else {},
+        "updated_at": profiles[0]["updated_at"] if profiles else "",
+    }
+
+
+def save_account_tool_settings_profile(user_id=None, email=None, tool=None, name=None, settings=None):
+    user_key = str(user_id or "").strip()
+    if not user_key:
+        raise RuntimeError("Missing user id.")
+    tool_name = normalize_tool_name(tool)
+    sanitized_settings = sanitize_tool_settings(settings)
+    store = load_account_store()
+    user_record = store["users"].get(user_key) or default_account_record(user_key, email=email)
+    if email:
+        user_record["email"] = email
+    tool_settings = dict(user_record.get("tool_settings") or {})
+    profiles = normalize_tool_settings_profiles(tool_settings, tool_name=tool_name)
+    now = utc_now_iso()
+    profile = {
+        "id": uuid.uuid4().hex,
+        "name": str(name or default_tool_settings_name(tool_name, now))[:120],
+        "tool": tool_name,
+        "created_at": now,
+        "updated_at": now,
+        "settings": sanitized_settings,
+    }
+    profiles.insert(0, profile)
+    tool_settings[tool_name] = {"profiles": profiles[:72]}
+    user_record["tool_settings"] = tool_settings
+    user_record["updated_at"] = now
+    store["users"][user_key] = user_record
+    save_account_store(store)
+    return {
+        "ok": True,
+        "user_id": user_key,
+        "tool": tool_name,
+        "profile": profile,
+        "profiles": tool_settings[tool_name]["profiles"],
+        "settings": sanitized_settings,
+        "updated_at": now,
+    }
+
+
+def find_tool_profile_location(user_record, profile_id):
+    wanted_id = str(profile_id or "").strip()
+    if not wanted_id:
+        raise RuntimeError("Missing profile id.")
+    tool_settings = dict(user_record.get("tool_settings") or {})
+    for tool_name in ("slideshow", "captions"):
+        profiles = normalize_tool_settings_profiles(tool_settings, tool_name=tool_name)
+        for index, profile in enumerate(profiles):
+            if profile.get("id") == wanted_id:
+                return tool_settings, tool_name, profiles, index
+    raise RuntimeError("Settings profile not found.")
+
+
+def rename_account_tool_settings_profile(user_id=None, profile_id=None, name=None):
+    user_key = str(user_id or "").strip()
+    clean_name = str(name or "").strip()
+    if not user_key:
+        raise RuntimeError("Missing user id.")
+    if not clean_name:
+        raise RuntimeError("Missing profile name.")
+    store = load_account_store()
+    user_record = store["users"].get(user_key)
+    if not user_record:
+        raise RuntimeError("Account not found.")
+    tool_settings, tool_name, profiles, index = find_tool_profile_location(user_record, profile_id)
+    profiles[index]["name"] = clean_name[:120]
+    profiles[index]["updated_at"] = utc_now_iso()
+    tool_settings[tool_name] = {"profiles": profiles}
+    user_record["tool_settings"] = tool_settings
+    user_record["updated_at"] = utc_now_iso()
+    store["users"][user_key] = user_record
+    save_account_store(store)
+    return {"ok": True, "profile": profiles[index], "profiles": normalize_tool_settings_profiles(tool_settings)}
+
+
+def delete_account_tool_settings_profile(user_id=None, profile_id=None):
+    user_key = str(user_id or "").strip()
+    if not user_key:
+        raise RuntimeError("Missing user id.")
+    store = load_account_store()
+    user_record = store["users"].get(user_key)
+    if not user_record:
+        raise RuntimeError("Account not found.")
+    tool_settings, tool_name, profiles, index = find_tool_profile_location(user_record, profile_id)
+    removed = profiles.pop(index)
+    tool_settings[tool_name] = {"profiles": profiles}
+    user_record["tool_settings"] = tool_settings
+    user_record["updated_at"] = utc_now_iso()
+    store["users"][user_key] = user_record
+    save_account_store(store)
+    return {"ok": True, "removed": removed, "profiles": normalize_tool_settings_profiles(tool_settings)}
 
 
 def parse_paddle_signature(header_value):
@@ -478,6 +725,11 @@ def apply_billing_event(payload):
             "plan_name": FREE_PLAN_NAME if not has_active_premium(status) else plan_name,
             "billing_status": status,
             "premium_access": has_active_premium(status),
+            "subscription_ends_at": (
+                get_nested_value(data, "current_billing_period", "ends_at")
+                or data.get("next_billed_at")
+                or record.get("subscription_ends_at", "")
+            ),
             "subscription_id": subscription_id,
             "customer_id": customer_id,
             "price_id": price_id,

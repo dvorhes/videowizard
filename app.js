@@ -80,41 +80,49 @@ const els = {
   utilityHelpList: document.querySelector("#utilityHelpList"),
   utilityHelpFooter: document.querySelector("#utilityHelpFooter"),
   utilityMenuStatus: document.querySelector("#utilityMenuStatus"),
-  logoutMenuAction: document.querySelector("[data-menu-action='logout']"),
+  authMenuAction: document.querySelector("#authMenuAction"),
+  createAccountMenuAction: document.querySelector("#createAccountMenuAction"),
+  settingsMenuAction: document.querySelector("#settingsMenuAction"),
+  accountMenuButton: document.querySelector("#accountMenuButton"),
+  accountMenu: document.querySelector("#accountMenu"),
   homePage: document.querySelector("#homePage"),
+  loginPage: document.querySelector("#loginPage"),
   slideshowPage: document.querySelector("#slideshowPage"),
   captionsPage: document.querySelector("#captionsPage"),
   settingsPage: document.querySelector("#settingsPage"),
-  accountStatusChip: document.querySelector("#accountStatusChip"),
-  accountAuthStatus: document.querySelector("#accountAuthStatus"),
+  accountPage: document.querySelector("#accountPage"),
+  authPageTitle: document.querySelector("#authPageTitle"),
   accountUserEmail: document.querySelector("#accountUserEmail"),
+  accountEmailConfirmationNote: document.querySelector("#accountEmailConfirmationNote"),
   accountPlanName: document.querySelector("#accountPlanName"),
-  accountPremiumStatus: document.querySelector("#accountPremiumStatus"),
+  accountSubscriptionEnds: document.querySelector("#accountSubscriptionEnds"),
+  accountDayPasses: document.querySelector("#accountDayPasses"),
+  accountEmailEditor: document.querySelector("#accountEmailEditor"),
+  accountPasswordEditor: document.querySelector("#accountPasswordEditor"),
   authForm: document.querySelector("#authForm"),
   authEmail: document.querySelector("#authEmail"),
   authPassword: document.querySelector("#authPassword"),
+  accountNewEmail: document.querySelector("#accountNewEmail"),
+  accountNewPassword: document.querySelector("#accountNewPassword"),
   signInButton: document.querySelector("#signInButton"),
   signUpButton: document.querySelector("#signUpButton"),
   signOutButton: document.querySelector("#signOutButton"),
+  toggleEmailEditButton: document.querySelector("#toggleEmailEditButton"),
+  cancelEmailEditButton: document.querySelector("#cancelEmailEditButton"),
+  togglePasswordEditButton: document.querySelector("#togglePasswordEditButton"),
+  cancelPasswordEditButton: document.querySelector("#cancelPasswordEditButton"),
+  updateEmailButton: document.querySelector("#updateEmailButton"),
+  updatePasswordButton: document.querySelector("#updatePasswordButton"),
   authMessage: document.querySelector("#authMessage"),
-  billingStatusChip: document.querySelector("#billingStatusChip"),
-  billingSummary: document.querySelector("#billingSummary"),
-  billingPlanLabel: document.querySelector("#billingPlanLabel"),
-  billingStatusLabel: document.querySelector("#billingStatusLabel"),
-  billingFeatureLabel: document.querySelector("#billingFeatureLabel"),
-  upgradeButton: document.querySelector("#upgradeButton"),
-  manageBillingButton: document.querySelector("#manageBillingButton"),
-  refreshAccessButton: document.querySelector("#refreshAccessButton"),
-  billingMessage: document.querySelector("#billingMessage"),
-  profileSettingsForm: document.querySelector("#profileSettingsForm"),
-  profileDisplayName: document.querySelector("#profileDisplayName"),
-  profileDefaultQuality: document.querySelector("#profileDefaultQuality"),
-  profileDefaultRoute: document.querySelector("#profileDefaultRoute"),
-  profileAutoSave: document.querySelector("#profileAutoSave"),
-  profileSettingsMessage: document.querySelector("#profileSettingsMessage"),
+  saveSlideshowProfileButton: document.querySelector("#saveSlideshowProfileButton"),
   saveCaptionProfileButton: document.querySelector("#saveCaptionProfileButton"),
+  toolProfilesSummary: document.querySelector("#toolProfilesSummary"),
   savedProfilesList: document.querySelector("#savedProfilesList"),
   savedProfilesMessage: document.querySelector("#savedProfilesMessage"),
+  loadSlideshowSettingsSelect: document.querySelector("#loadSlideshowSettingsSelect"),
+  slideshowSettingsStatus: document.querySelector("#slideshowSettingsStatus"),
+  loadCaptionSettingsSelect: document.querySelector("#loadCaptionSettingsSelect"),
+  captionSettingsStatus: document.querySelector("#captionSettingsStatus"),
   captionVideoInput: document.querySelector("#captionVideoInput"),
   captionVideoName: document.querySelector("#captionVideoName"),
   captionVideoDropIcon: document.querySelector(".captions-dropzone .drop-icon"),
@@ -290,7 +298,9 @@ const state = {
     supabase: null,
     session: null,
     status: null,
+    pendingEmailConfirmation: "",
     savedProfiles: [],
+    toolProfilesLoaded: false,
     localProfile: null,
     authReady: false,
     isStaticFallback: false,
@@ -321,6 +331,30 @@ const routes = {
         "Use the freebie area for future lead magnets or email capture.",
       ],
       footer: "Everything here is meant to feel lightweight and browser-first.",
+    },
+  },
+  "/login": {
+    key: "login",
+    title: "Log In",
+    page: els.loginPage,
+    help: {
+      title: "Log in",
+      steps: [
+        "Sign in with your existing account.",
+      ],
+      footer: "",
+    },
+  },
+  "/create-account": {
+    key: "create-account",
+    title: "Create Account",
+    page: els.loginPage,
+    help: {
+      title: "Create account",
+      steps: [
+        "Create a new account with your email and password.",
+      ],
+      footer: "",
     },
   },
   "/slideshow": {
@@ -364,15 +398,26 @@ const routes = {
       footer: "This is still a draft space, so it is a good place to keep brainstorming product ideas.",
     },
   },
+  "/account": {
+    key: "account",
+    title: "Account",
+    page: els.accountPage,
+    help: {
+      title: "Account",
+      steps: [],
+      footer: "",
+    },
+  },
 };
 
 populateCaptionFontFamilyOptions();
 syncCaptionFontWeightOptions(DEFAULT_CAPTION_FONT_WEIGHT);
 
-els.homeMenuButton.addEventListener("click", toggleHomeMenu);
-els.homeMenu.addEventListener("click", handleHomeMenuClick);
-els.brandMenuButton.addEventListener("click", toggleBrandMenu);
-els.brandMenu.addEventListener("click", handleBrandMenuClick);
+els.homeMenuButton?.addEventListener("click", toggleHomeMenu);
+els.homeMenu?.addEventListener("click", handleHomeMenuClick);
+els.accountMenuButton?.addEventListener("click", toggleAccountMenu);
+els.accountMenu?.addEventListener("click", handleAccountMenuClick);
+els.authMenuAction?.addEventListener("click", handleAuthAction);
 document.querySelectorAll("[data-path], [data-external-url]").forEach((element) => {
   element.addEventListener("click", () => handleCardNavigation(element));
   if (!["BUTTON", "A"].includes(element.tagName)) {
@@ -384,7 +429,7 @@ document.querySelectorAll("[data-path], [data-external-url]").forEach((element) 
   }
 });
 document.addEventListener("click", closeHomeMenuOnOutsideClick);
-document.addEventListener("click", closeBrandMenuOnOutsideClick);
+document.addEventListener("click", closeAccountMenuOnOutsideClick);
 document.addEventListener("keydown", handleGlobalKeydown);
 window.addEventListener("popstate", renderRoute);
 window.addEventListener("resize", () => {
@@ -501,16 +546,17 @@ els.qualityRange.addEventListener("input", handleSettingsChange);
 els.photoInput.addEventListener("change", handlePhotos);
 els.audioInput.addEventListener("change", handleAudio);
 els.generateButton.addEventListener("click", generateSlideshow);
+els.loadSlideshowSettingsSelect.addEventListener("change", () => void handleLoadToolSettings("slideshow"));
 els.authForm.addEventListener("submit", handleSignInSubmit);
 els.signUpButton.addEventListener("click", handleSignUpClick);
 els.signOutButton.addEventListener("click", handleSignOutClick);
-els.upgradeButton.addEventListener("click", handleUpgradeClick);
-els.manageBillingButton.addEventListener("click", handleManageBillingClick);
-els.refreshAccessButton.addEventListener("click", () => {
-  void refreshAccountStatus({ force: true, messageTarget: "billing" });
-});
-els.profileSettingsForm.addEventListener("submit", handleProfileSettingsSubmit);
-els.saveCaptionProfileButton.addEventListener("click", handleSaveCurrentCaptionProfile);
+els.toggleEmailEditButton.addEventListener("click", () => void handleEmailEditButtonClick());
+els.cancelEmailEditButton.addEventListener("click", () => closeAccountEditor("email"));
+els.togglePasswordEditButton.addEventListener("click", () => toggleAccountEditor("password"));
+els.cancelPasswordEditButton.addEventListener("click", () => closeAccountEditor("password"));
+els.updateEmailButton?.addEventListener("click", handleUpdateEmailClick);
+els.updatePasswordButton.addEventListener("click", handleUpdatePasswordClick);
+els.loadCaptionSettingsSelect.addEventListener("change", () => void handleLoadToolSettings("captions"));
 els.trashDrop.addEventListener("dragover", handleTrashDragOver);
 els.trashDrop.addEventListener("dragleave", handleTrashDragLeave);
 els.trashDrop.addEventListener("drop", handleTrashDrop);
@@ -544,9 +590,7 @@ function toggleHomeMenu(event) {
 function setHomeMenuOpen(isOpen) {
   els.homeMenu.hidden = !isOpen;
   els.homeMenuButton.setAttribute("aria-expanded", String(isOpen));
-  if (isOpen) {
-    setBrandMenuOpen(false);
-  }
+  if (isOpen) setAccountMenuOpen(false);
 }
 
 function handleHomeMenuClick(event) {
@@ -563,31 +607,43 @@ function closeHomeMenuOnOutsideClick(event) {
   setHomeMenuOpen(false);
 }
 
-function toggleBrandMenu(event) {
+function toggleAccountMenu(event) {
   event.stopPropagation();
-  els.brandMenuButton.classList.remove("is-jittering");
-  void els.brandMenuButton.offsetWidth;
-  els.brandMenuButton.classList.add("is-jittering");
-  setBrandMenuOpen(els.brandMenu.hidden);
+  setAccountMenuOpen(els.accountMenu.hidden);
 }
 
-function setBrandMenuOpen(isOpen) {
-  els.brandMenu.hidden = !isOpen;
-  els.brandMenuButton.setAttribute("aria-expanded", String(isOpen));
+function setAccountMenuOpen(isOpen) {
+  if (!els.accountMenu || !els.accountMenuButton) return;
+  els.accountMenu.hidden = !isOpen;
+  els.accountMenuButton.setAttribute("aria-expanded", String(isOpen));
   if (isOpen) setHomeMenuOpen(false);
-  if (!isOpen) resetUtilityMenuPanels();
 }
 
-function closeBrandMenuOnOutsideClick(event) {
-  if (els.brandMenu.hidden) return;
-  if (event.target.closest(".brand-nav")) return;
-  setBrandMenuOpen(false);
+function handleAccountMenuClick(event) {
+  const pathButton = event.target.closest("[data-account-menu-path]");
+  if (pathButton) {
+    navigateToPath(pathButton.dataset.accountMenuPath || "/settings");
+    setAccountMenuOpen(false);
+    return;
+  }
+  const actionButton = event.target.closest("[data-account-menu-action]");
+  if (!actionButton) return;
+  if (actionButton.dataset.accountMenuAction === "logout") {
+    setAccountMenuOpen(false);
+    void handleSignOutClick();
+  }
+}
+
+function closeAccountMenuOnOutsideClick(event) {
+  if (!els.accountMenu || els.accountMenu.hidden) return;
+  if (event.target.closest(".account-menu-nav")) return;
+  setAccountMenuOpen(false);
 }
 
 function handleGlobalKeydown(event) {
   if (event.key === "Escape") {
     setHomeMenuOpen(false);
-    setBrandMenuOpen(false);
+    setAccountMenuOpen(false);
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && shouldHandleCaptionUndo(event.target)) {
     event.preventDefault();
@@ -595,29 +651,12 @@ function handleGlobalKeydown(event) {
   }
 }
 
-function handleBrandMenuClick(event) {
-  const pathButton = event.target.closest("[data-path]");
-  if (pathButton) {
-    navigateToPath(pathButton.dataset.path || "/");
-    setBrandMenuOpen(false);
+function handleAuthAction() {
+  if (!getCurrentUser()) {
+    navigateToPath("/login");
     return;
   }
-  const actionButton = event.target.closest("[data-menu-action]");
-  if (!actionButton) return;
-  const action = actionButton.dataset.menuAction;
-  if (action === "help") {
-    toggleUtilityHelp();
-    return;
-  }
-  if (action === "logout") {
-    if (!getCurrentUser()) {
-      navigateToPath("/settings");
-      showUtilityMenuStatus("Sign in from Settings to unlock account features.");
-      return;
-    }
-    void handleSignOutClick();
-    showUtilityMenuStatus("Signed out.");
-  }
+  void handleSignOutClick();
 }
 
 function navigateToPath(pathname) {
@@ -625,6 +664,17 @@ function navigateToPath(pathname) {
     history.pushState({}, "", pathname);
   }
   renderRoute();
+}
+
+function redirectAuthenticatedUserHome() {
+  if (!getCurrentUser()) return;
+  if (window.location.pathname === "/login" || window.location.pathname === "/create-account") {
+    navigateToPath("/");
+  }
+}
+
+function redirectToHome() {
+  navigateToPath("/");
 }
 
 function handleCardNavigation(element) {
@@ -636,47 +686,61 @@ function handleCardNavigation(element) {
 }
 
 function renderRoute() {
-  const route = routes[window.location.pathname] || routes["/"];
-  Object.values(routes).forEach((item) => {
-    item.page.hidden = item.key !== route.key;
+  const pathname = window.location.pathname;
+  const user = getCurrentUser();
+  const requestedRoute = routes[pathname] || routes["/"];
+  const route = requestedRoute.key === "settings" && !user ? routes["/login"] : requestedRoute;
+  if (route !== requestedRoute && pathname !== "/login") {
+    history.replaceState({}, "", "/login");
+  }
+  [els.homePage, els.loginPage, els.slideshowPage, els.captionsPage, els.settingsPage, els.accountPage].forEach((page) => {
+    page.hidden = page !== route.page;
   });
-  els.appTitle.textContent = route.title;
-  populateUtilityHelp(route.help);
-  resetUtilityMenuPanels();
+  els.appTitle.textContent = "Video Wizard";
   document.title = route.key === "home" ? "Video Wizard" : `Video Wizard | ${route.title}`;
   els.homeMenu
     .querySelectorAll("a[data-route]")
     .forEach((link) => {
       link.setAttribute("aria-current", link.dataset.route === route.key ? "page" : "false");
     });
+  renderAuthPage(route.key);
+  syncAccountMenuState();
 }
 
-function populateUtilityHelp(help = {}) {
-  const { title = "Help", steps = [], footer = "" } = help;
-  els.utilityHelpTitle.textContent = title;
-  els.utilityHelpList.innerHTML = steps.map((step) => `<li>${step}</li>`).join("");
-  els.utilityHelpFooter.textContent = footer;
+function renderAuthPage(routeKey) {
+  const isCreateAccount = routeKey === "create-account";
+  els.authPageTitle.textContent = isCreateAccount ? "Create account" : "Log in";
+  els.signInButton.hidden = isCreateAccount;
+  els.signUpButton.hidden = !isCreateAccount;
 }
 
-function toggleUtilityHelp() {
-  const shouldOpen = els.utilityHelpPanel.hidden;
-  els.utilityHelpPanel.hidden = !shouldOpen;
-  if (shouldOpen) {
-    els.utilityMenuStatus.hidden = true;
-    els.utilityMenuStatus.textContent = "";
+function syncAccountMenuState() {
+  const user = getCurrentUser();
+  if (els.accountPlanBadge) {
+    els.accountPlanBadge.hidden = true;
+    els.accountPlanBadge.style.display = "none";
   }
-}
-
-function showUtilityMenuStatus(message) {
-  els.utilityMenuStatus.textContent = message;
-  els.utilityMenuStatus.hidden = false;
-  els.utilityHelpPanel.hidden = true;
-}
-
-function resetUtilityMenuPanels() {
-  els.utilityHelpPanel.hidden = true;
-  els.utilityMenuStatus.hidden = true;
-  els.utilityMenuStatus.textContent = "";
+  if (els.settingsMenuAction) {
+    els.settingsMenuAction.hidden = true;
+    els.settingsMenuAction.style.display = "none";
+  }
+  if (els.authMenuAction) {
+    els.authMenuAction.textContent = user ? "Log out" : "Log in";
+    els.authMenuAction.hidden = Boolean(user);
+    els.authMenuAction.style.display = user ? "none" : "";
+  }
+  if (els.createAccountMenuAction) {
+    const shouldHideCreateAccount = Boolean(user);
+    els.createAccountMenuAction.hidden = shouldHideCreateAccount;
+    els.createAccountMenuAction.style.display = shouldHideCreateAccount ? "none" : "";
+  }
+  if (els.accountMenuButton) {
+    els.accountMenuButton.hidden = !user;
+    els.accountMenuButton.style.display = user ? "inline-grid" : "none";
+  }
+  if (!user) {
+    setAccountMenuOpen(false);
+  }
 }
 
 async function initAccountSystem() {
@@ -688,7 +752,6 @@ async function initAccountSystem() {
 
   state.account.config = await fetchAppConfig();
 
-  populateBillingFeatureLabel();
   applyLocalProfileDefaults();
   renderAccountState();
 
@@ -701,6 +764,7 @@ async function initAccountSystem() {
   initPaddleBilling();
   if (state.account.supabase) {
     await refreshAccountStatus({ force: true });
+    await refreshAccountToolProfiles({ silent: true });
   }
 }
 
@@ -751,7 +815,9 @@ async function initializeSupabase() {
     state.account.authReady = true;
     state.account.supabase.auth.onAuthStateChange((_event, session) => {
       state.account.session = session;
+      redirectAuthenticatedUserHome();
       void refreshAccountStatus({ force: true });
+      void refreshAccountToolProfiles({ silent: true });
       renderAccountState();
     });
   } catch (error) {
@@ -798,6 +864,8 @@ function getDefaultAccountStatus() {
     plan_name: "Free",
     billing_status: "free",
     premium_access: false,
+    subscription_ends_at: "",
+    day_passes_remaining: 0,
     premium_features: [],
   };
 }
@@ -866,24 +934,15 @@ async function refreshAccountStatus({ force = false, messageTarget = "auth" } = 
 }
 
 function hasPremiumAccess() {
-  if (state.account.isStaticFallback) return true;
-  return Boolean(state.account.status?.premium_access);
+  return true;
 }
 
 function isFeatureAllowed(feature) {
-  if (feature === PREMIUM_GATES.slideshowHighQuality) {
-    return hasPremiumAccess();
-  }
-  if (feature === PREMIUM_GATES.captionBurnedVideo || feature === PREMIUM_GATES.captionEdlPackage) {
-    return hasPremiumAccess();
-  }
+  void feature;
   return true;
 }
 
 function applyPremiumAccessState() {
-  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
-    els.qualityRange.value = "2";
-  }
   updateQualityLabel();
   updateCaptionActionAvailability();
 }
@@ -891,45 +950,55 @@ function applyPremiumAccessState() {
 function renderAccountState() {
   const user = getCurrentUser();
   const status = state.account.status || getDefaultAccountStatus();
-  const email = user?.email || state.account.localProfile?.email || "Browser guest";
-  const premium = Boolean(status.premium_access);
-  const planName = status.plan_name || (premium ? "Premium" : "Free");
+  const email = user?.email || "—";
+  const premium = Boolean(status.premium_access) || String(status.plan_name || "").toLowerCase() === "premium";
+  const planName = premium ? "Premium" : "Free";
   const billingStatus = humanizeBillingStatus(status.billing_status);
+  const subscriptionEnds = getSubscriptionEndLabel(status);
+  const dayPasses = getDayPassCount(status);
 
   if (user?.email) {
     els.authEmail.value = user.email;
   }
-  els.accountStatusChip.textContent = user ? "Signed in" : "Guest";
-  els.accountAuthStatus.textContent = user ? "Signed in" : "Not signed in";
-  els.accountUserEmail.textContent = email;
+  if (user?.email && state.account.pendingEmailConfirmation && user.email === state.account.pendingEmailConfirmation) {
+    state.account.pendingEmailConfirmation = "";
+  }
+  if (els.accountNewEmail.disabled) {
+    els.accountNewEmail.value = user?.email || "";
+  }
+  els.accountEmailConfirmationNote.hidden = !(user && state.account.pendingEmailConfirmation);
+  if (user && state.account.pendingEmailConfirmation) {
+    els.accountEmailConfirmationNote.textContent = `Please confirm the change in your email inbox for ${state.account.pendingEmailConfirmation}. Until that is complete, keep signing in with your current email. Depending on your Supabase Secure Email Change setting, you may need to confirm from both the old and new email addresses.`;
+  }
   els.accountPlanName.textContent = planName;
-  els.accountPlanBadge.hidden = false;
+  els.accountSubscriptionEnds.textContent = subscriptionEnds;
+  els.accountDayPasses.textContent = dayPasses;
+  els.accountPlanBadge.hidden = true;
+  els.accountPlanBadge.style.display = "none";
   els.accountPlanBadgeLabel.textContent = premium ? planName : "Free";
-  els.billingStatusChip.textContent = premium ? "Premium" : "Free";
-  els.billingPlanLabel.textContent = planName;
-  els.billingStatusLabel.textContent = billingStatus;
-  els.billingSummary.textContent = state.account.isStaticFallback
-    ? "Billing is not connected yet."
-    : premium
-      ? "Premium access is active."
-      : "No active subscription.";
-  els.manageBillingButton.disabled = state.account.isStaticFallback || !state.account.config?.billingPortalUrl;
-  els.refreshAccessButton.disabled = state.account.isStaticFallback;
   els.signInButton.disabled = !state.account.supabase;
   els.signUpButton.disabled = !state.account.supabase;
   els.signOutButton.disabled = !state.account.supabase || !user;
-  els.upgradeButton.disabled = state.account.isStaticFallback || !state.account.config?.paddlePriceId;
-  if (els.logoutMenuAction) {
-    els.logoutMenuAction.textContent = state.account.isStaticFallback ? "Account setup soon" : (user ? "Log out" : "Sign in required");
+  els.signOutButton.hidden = !user;
+  if (els.updateEmailButton) {
+    els.updateEmailButton.disabled = !state.account.supabase || !user;
   }
-  populateBillingFeatureLabel();
+  els.updatePasswordButton.disabled = !state.account.supabase || !user;
+  els.toggleEmailEditButton.disabled = !state.account.supabase || !user;
+  els.togglePasswordEditButton.disabled = !state.account.supabase || !user;
+  if (!user) {
+    closeAccountEditor("email");
+    closeAccountEditor("password");
+  }
+  syncAccountMenuState();
   if (state.account.isStaticFallback) {
     if (!state.account.supabase) {
       setAuthMessage("Sign-in is not available right now.");
     } else if (!user) {
-      setAuthMessage("Enter your email and password to sign in.");
+      setAuthMessage(window.location.pathname === "/create-account"
+        ? "Enter your email and password to create an account."
+        : "Enter your email and password to sign in.");
     }
-    setBillingMessage("");
   }
   updateQualityLabel();
 }
@@ -939,10 +1008,18 @@ function humanizeBillingStatus(value) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-function populateBillingFeatureLabel() {
-  if (!els.billingFeatureLabel) return;
-  const features = state.account.config?.premiumFeatures || [];
-  els.billingFeatureLabel.textContent = features.join(", ");
+function getSubscriptionEndLabel(status = {}) {
+  const rawValue = status.subscription_ends_at || status.expires_at || status.renews_at || status.current_period_end || "";
+  if (!rawValue) return "—";
+  const date = new Date(rawValue);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString();
+}
+
+function getDayPassCount(status = {}) {
+  const value = status.day_passes_remaining;
+  if (!Number.isFinite(Number(value))) return "0";
+  return String(Math.max(0, Number(value)));
 }
 
 function setAuthMessage(message = "") {
@@ -950,22 +1027,204 @@ function setAuthMessage(message = "") {
 }
 
 function setBillingMessage(message = "") {
-  if (els.billingMessage) els.billingMessage.textContent = message;
-}
-
-function setProfileSettingsMessage(message = "") {
-  els.profileSettingsMessage.textContent = message;
+  void message;
 }
 
 function setSavedProfilesMessage(message = "") {
   els.savedProfilesMessage.textContent = message;
 }
 
+function setToolSettingsStatus(tool, message = "") {
+  if (tool === "slideshow") {
+    els.slideshowSettingsStatus.textContent = message;
+    return;
+  }
+  els.captionSettingsStatus.textContent = message;
+}
+
+function getToolSettingsSnapshot(tool) {
+  return tool === "slideshow" ? getSlideshowSettingsSnapshot() : getCaptionSettingsSnapshot();
+}
+
+function applyToolSettingsSnapshot(tool, settings) {
+  if (tool === "slideshow") {
+    applyControlValues(settings);
+    updateTimingLabels();
+    return;
+  }
+  applyCaptionSettingsSnapshot(settings);
+}
+
+function getProfileSelectForTool(tool) {
+  return tool === "slideshow" ? els.loadSlideshowSettingsSelect : els.loadCaptionSettingsSelect;
+}
+
+function getToolProfiles(tool) {
+  return (state.account.savedProfiles || []).filter((profile) => profile.tool === tool);
+}
+
+function formatSettingsProfileName(tool, date = new Date()) {
+  const label = tool === "slideshow" ? "Slideshow" : "Captions";
+  return `${label} profile - ${date.toLocaleString()}`;
+}
+
+async function fetchAccountToolSettings(tool = "") {
+  const user = getCurrentUser();
+  if (!user) {
+    throw new Error("Sign in to load profiles.");
+  }
+  const query = new URLSearchParams({ user_id: user.id });
+  if (tool) query.set("tool", tool);
+  const response = await fetch(`/api/account/tool-settings?${query.toString()}`, {
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Could not load profiles.");
+  }
+  return payload;
+}
+
+async function handleLoadToolSettings(tool) {
+  const select = getProfileSelectForTool(tool);
+  const profileId = select.value;
+  if (!profileId) {
+    setToolSettingsStatus(tool, "");
+    return;
+  }
+  try {
+    setToolSettingsStatus(tool, "Loading profile…");
+    const profile = getToolProfiles(tool).find((item) => item.id === profileId);
+    if (!profile?.settings) {
+      setToolSettingsStatus(tool, "Profile not found.");
+      select.value = "";
+      return;
+    }
+    applyToolSettingsSnapshot(tool, profile.settings);
+    persistWorkspaceDefaults();
+    setToolSettingsStatus(tool, "Profile loaded.");
+  } catch (error) {
+    setToolSettingsStatus(tool, normalizeError(error));
+  } finally {
+    select.value = "";
+  }
+}
+
+async function refreshAccountToolProfiles({ silent = false } = {}) {
+  const user = getCurrentUser();
+  if (!user) {
+    state.account.savedProfiles = [];
+    state.account.toolProfilesLoaded = false;
+    renderSavedProfiles();
+    renderToolSettingsSelects();
+    return;
+  }
+  try {
+    const payload = await fetchAccountToolSettings();
+    state.account.savedProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+    state.account.toolProfilesLoaded = true;
+    renderSavedProfiles();
+    renderToolSettingsSelects();
+    if (!silent) setSavedProfilesMessage("");
+  } catch (error) {
+    if (!silent) setSavedProfilesMessage(normalizeError(error));
+  }
+}
+
+async function saveAutomaticToolSettings(tool, settings = getToolSettingsSnapshot(tool)) {
+  const user = getCurrentUser();
+  if (!user || !state.account.supabase || state.account.isStaticFallback) return null;
+  try {
+    const savedAt = new Date();
+    const response = await fetch("/api/account/tool-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save",
+        user_id: user.id,
+        email: user.email || "",
+        tool,
+        name: formatSettingsProfileName(tool, savedAt),
+        settings,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || `Could not save ${tool} settings.`);
+    }
+    state.account.savedProfiles = mergeToolProfiles(payload.profiles || [payload.profile]);
+    renderSavedProfiles();
+    renderToolSettingsSelects();
+    return payload.profile || null;
+  } catch (error) {
+    setToolSettingsStatus(tool, normalizeError(error));
+    return null;
+  }
+}
+
+function toggleAccountEditor(kind) {
+  const user = getCurrentUser();
+  if (!state.account.supabase || !user) {
+    setAuthMessage("Sign in first.");
+    return;
+  }
+  const isEmail = kind === "email";
+  if (isEmail) {
+    els.accountPasswordEditor.hidden = true;
+    els.accountNewPassword.value = "";
+    els.accountNewEmail.readOnly = false;
+    els.accountNewEmail.disabled = false;
+    els.toggleEmailEditButton.textContent = "Save";
+    els.cancelEmailEditButton.hidden = false;
+    els.accountNewEmail.value = user.email || "";
+    els.accountNewEmail.focus();
+    els.accountNewEmail.select();
+    return;
+  }
+  const editor = els.accountPasswordEditor;
+  const input = isEmail ? els.accountNewEmail : els.accountNewPassword;
+  const willOpen = editor.hidden;
+  editor.hidden = !willOpen;
+  if (willOpen) {
+    closeAccountEditor("email");
+    input.value = "";
+    input.focus();
+  }
+}
+
+async function handleEmailEditButtonClick() {
+  if (els.accountNewEmail.disabled) {
+    toggleAccountEditor("email");
+    return;
+  }
+  await handleUpdateEmailClick();
+}
+
+function closeAccountEditor(kind) {
+  const isEmail = kind === "email";
+  const editor = isEmail ? null : els.accountPasswordEditor;
+  const input = isEmail ? els.accountNewEmail : els.accountNewPassword;
+  if (editor) {
+    editor.hidden = true;
+    input.value = "";
+    return;
+  }
+  input.readOnly = true;
+  input.disabled = true;
+  input.value = getCurrentUser()?.email || "";
+  els.toggleEmailEditButton.textContent = "Edit";
+  els.cancelEmailEditButton.hidden = true;
+}
+
 async function handleSignInSubmit(event) {
   event.preventDefault();
+  if (window.location.pathname === "/create-account") {
+    await handleSignUpClick();
+    return;
+  }
   const supabase = state.account.supabase;
   if (!supabase) {
-    setAuthMessage("Supabase login is not configured yet.");
+    setAuthMessage("Sign-in is not available right now.");
     return;
   }
   const email = els.authEmail.value.trim();
@@ -981,13 +1240,14 @@ async function handleSignInSubmit(event) {
     return;
   }
   els.authPassword.value = "";
-  setAuthMessage("Signed in.");
+  setAuthMessage("");
+  redirectAuthenticatedUserHome();
 }
 
 async function handleSignUpClick() {
   const supabase = state.account.supabase;
   if (!supabase) {
-    setAuthMessage("Supabase signup is not configured yet.");
+    setAuthMessage("Sign-in is not available right now.");
     return;
   }
   const email = els.authEmail.value.trim();
@@ -999,11 +1259,49 @@ async function handleSignUpClick() {
   setAuthMessage("Creating account…");
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) {
+    if (shouldRetryExistingAccountSignIn(error)) {
+      await signInExistingAccount(email, password, {
+        loadingMessage: "That account already exists. Loading it instead…",
+      });
+      return;
+    }
+    setAuthMessage(normalizeError(error));
+    return;
+  }
+  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    await signInExistingAccount(email, password, {
+      loadingMessage: "That account already exists. Loading it instead…",
+    });
+    return;
+  }
+  els.authPassword.value = "";
+  setAuthMessage(data.session ? "" : "Account created. Check your email if confirmation is enabled.");
+  if (data.session) {
+    redirectAuthenticatedUserHome();
+  }
+}
+
+function shouldRetryExistingAccountSignIn(error) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("already registered")
+    || message.includes("already been registered")
+    || message.includes("user already registered")
+    || message.includes("already exists");
+}
+
+async function signInExistingAccount(email, password, options = {}) {
+  const supabase = state.account.supabase;
+  if (!supabase) return;
+  const { loadingMessage = "Signing in…" } = options;
+  setAuthMessage(loadingMessage);
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
     setAuthMessage(normalizeError(error));
     return;
   }
   els.authPassword.value = "";
-  setAuthMessage(data.session ? "Account created and signed in." : "Account created. Check your email if confirmation is enabled.");
+  setAuthMessage("");
+  redirectAuthenticatedUserHome();
 }
 
 async function handleSignOutClick() {
@@ -1020,7 +1318,54 @@ async function handleSignOutClick() {
   state.account.status = getDefaultAccountStatus();
   applyPremiumAccessState();
   renderAccountState();
-  setAuthMessage("Signed out.");
+  setAuthMessage("");
+  redirectToHome();
+}
+
+async function handleUpdateEmailClick() {
+  const supabase = state.account.supabase;
+  const user = getCurrentUser();
+  const email = els.accountNewEmail.value.trim();
+  if (!supabase || !user) {
+    setAuthMessage("Sign in first.");
+    return;
+  }
+  if (!email) {
+    setAuthMessage("Enter a new email address.");
+    return;
+  }
+  setAuthMessage("Updating email…");
+  const { error } = await supabase.auth.updateUser({ email });
+  if (error) {
+    setAuthMessage(normalizeError(error));
+    return;
+  }
+  state.account.pendingEmailConfirmation = email;
+  closeAccountEditor("email");
+  setAuthMessage("Check your email to confirm the change. Keep using your current email to sign in until the confirmation is complete.");
+  renderAccountState();
+}
+
+async function handleUpdatePasswordClick() {
+  const supabase = state.account.supabase;
+  const user = getCurrentUser();
+  const password = els.accountNewPassword.value;
+  if (!supabase || !user) {
+    setAuthMessage("Sign in first.");
+    return;
+  }
+  if (!password) {
+    setAuthMessage("Enter a new password.");
+    return;
+  }
+  setAuthMessage("Updating password…");
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    setAuthMessage(normalizeError(error));
+    return;
+  }
+  closeAccountEditor("password");
+  setAuthMessage("Password updated.");
 }
 
 function handleUpgradeClick() {
@@ -1063,17 +1408,9 @@ function handleManageBillingClick() {
   window.open(url, "_blank", "noopener");
 }
 
-function handleProfileSettingsSubmit(event) {
-  event.preventDefault();
-  saveLocalProfileFromForm();
-  setProfileSettingsMessage("Local defaults saved in this browser.");
-}
-
 function getDefaultLocalProfile() {
   return {
-    displayName: "",
     defaultQuality: "2",
-    defaultRoute: "/",
     autoSave: true,
   };
 }
@@ -1083,34 +1420,12 @@ function restoreLocalProfile() {
     ...getDefaultLocalProfile(),
     ...readLocalJson(LOCAL_STORAGE_KEYS.localProfile, {}),
   };
-  els.profileDisplayName.value = state.account.localProfile.displayName || "";
-  els.profileDefaultQuality.value = state.account.localProfile.defaultQuality || "2";
-  els.profileDefaultRoute.value = state.account.localProfile.defaultRoute || "/";
-  els.profileAutoSave.checked = state.account.localProfile.autoSave !== false;
-}
-
-function saveLocalProfileFromForm() {
-  state.account.localProfile = {
-    displayName: els.profileDisplayName.value.trim(),
-    defaultQuality: els.profileDefaultQuality.value,
-    defaultRoute: els.profileDefaultRoute.value,
-    autoSave: els.profileAutoSave.checked,
-  };
-  writeLocalJson(LOCAL_STORAGE_KEYS.localProfile, state.account.localProfile);
-  applyLocalProfileDefaults();
-  renderAccountState();
 }
 
 function applyLocalProfileDefaults() {
   const profile = state.account.localProfile || getDefaultLocalProfile();
   if (profile.defaultQuality) {
-    els.profileDefaultQuality.value = profile.defaultQuality;
-    if (state.account.localProfile?.autoSave === false) {
-      els.qualityRange.value = profile.defaultQuality;
-    }
-  }
-  if (profile.defaultRoute && profile.defaultRoute !== "/" && window.location.pathname === "/") {
-    navigateToPath(profile.defaultRoute);
+    els.qualityRange.value = profile.defaultQuality;
   }
 }
 
@@ -1198,44 +1513,89 @@ function applyControlValues(values = {}) {
 }
 
 function restoreSavedProfiles() {
-  state.account.savedProfiles = readLocalJson(LOCAL_STORAGE_KEYS.savedProfiles, []);
+  state.account.savedProfiles = [];
 }
 
 function persistSavedProfiles() {
-  writeLocalJson(LOCAL_STORAGE_KEYS.savedProfiles, state.account.savedProfiles);
+  void LOCAL_STORAGE_KEYS.savedProfiles;
+}
+
+function createToolProfile(tool, settings) {
+  void tool;
+  void settings;
+  return null;
+}
+
+function saveToolProfile(profile) {
+  void profile;
+}
+
+function handleSaveCurrentSlideshowProfile() {
+  void saveAutomaticToolSettings("slideshow", getSlideshowSettingsSnapshot());
 }
 
 function handleSaveCurrentCaptionProfile() {
-  const name = window.prompt("Name this caption preset:", "");
-  if (!name) return;
-  const now = new Date().toISOString();
-  state.account.savedProfiles.unshift({
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    type: "caption",
-    createdAt: now,
-    updatedAt: now,
-    settings: getCaptionSettingsSnapshot(),
+  void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
+}
+
+function mergeToolProfiles(incomingProfiles = []) {
+  const merged = new Map((state.account.savedProfiles || []).map((profile) => [profile.id, profile]));
+  incomingProfiles.filter(Boolean).forEach((profile) => {
+    if (!profile.id) return;
+    merged.set(profile.id, profile);
   });
-  state.account.savedProfiles = state.account.savedProfiles.slice(0, 24);
-  persistSavedProfiles();
-  renderSavedProfiles();
-  setSavedProfilesMessage("Preset saved locally.");
+  return Array.from(merged.values()).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+}
+
+function renderToolSettingsSelects() {
+  [
+    ["slideshow", els.loadSlideshowSettingsSelect, "Saved slideshow profiles"],
+    ["captions", els.loadCaptionSettingsSelect, "Saved caption profiles"],
+  ].forEach(([tool, select, placeholder]) => {
+    if (!select) return;
+    const profiles = getToolProfiles(tool);
+    const user = getCurrentUser();
+    const toolbar = select.closest(".settings-toolbar");
+    const shouldShow = Boolean(user && profiles.length);
+    if (toolbar) {
+      toolbar.hidden = !shouldShow;
+    }
+    select.innerHTML = `
+      <option value="">${escapeHtml(placeholder)}</option>
+      ${profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join("")}
+    `;
+    select.disabled = !shouldShow;
+  });
 }
 
 function renderSavedProfiles() {
   const profiles = state.account.savedProfiles || [];
-  if (!profiles.length) {
+  renderToolSettingsSelects();
+  if (!getCurrentUser()) {
+    els.toolProfilesSummary.textContent = "Log in to review saved profiles.";
     els.savedProfilesList.innerHTML = `
       <div class="profile-row muted">
         <div>
-          <strong>No saved profiles yet</strong>
-          <span>Store caption presets locally so users can jump back into their favorite look fast.</span>
+          <strong>No account loaded</strong>
+          <span>Profiles appear after login.</span>
         </div>
       </div>
     `;
     return;
   }
+  if (!profiles.length) {
+    els.toolProfilesSummary.textContent = "Profiles save automatically when you render or export.";
+    els.savedProfilesList.innerHTML = `
+      <div class="profile-row muted">
+        <div>
+          <strong>None (yet)</strong>
+          <span>Render or export from a tool to create one.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  els.toolProfilesSummary.textContent = `${profiles.length} saved profile${profiles.length === 1 ? "" : "s"}`;
   els.savedProfilesList.innerHTML = profiles.map((profile) => `
     <div class="profile-row">
       <div>
@@ -1243,6 +1603,7 @@ function renderSavedProfiles() {
         <span>${formatSavedProfileSummary(profile)}</span>
       </div>
       <div class="profile-row-actions">
+        <button class="ghost-action" type="button" data-profile-action="rename" data-profile-id="${profile.id}">Rename</button>
         <button class="ghost-action" type="button" data-profile-action="load" data-profile-id="${profile.id}">Load</button>
         <button class="ghost-action" type="button" data-profile-action="delete" data-profile-id="${profile.id}">Delete</button>
       </div>
@@ -1256,8 +1617,12 @@ function renderSavedProfiles() {
         loadSavedProfile(profileId);
         return;
       }
+      if (action === "rename") {
+        void renameSavedProfile(profileId);
+        return;
+      }
       if (action === "delete") {
-        deleteSavedProfile(profileId);
+        void deleteSavedProfile(profileId);
       }
     });
   });
@@ -1265,25 +1630,92 @@ function renderSavedProfiles() {
 
 function formatSavedProfileSummary(profile) {
   const settings = profile.settings || {};
+  const savedAt = formatProfileDate(profile.updated_at || profile.created_at);
+  if (profile.tool === "slideshow") {
+    const qualityLabel = qualityPresets[settings.qualityRange || "2"]?.label || "Medium";
+    const orientation = settings.orientation === "vertical" ? "Vertical" : "Horizontal";
+    const transition = settings.transition || "fade";
+    return `Slideshow · ${savedAt} · ${qualityLabel} · ${orientation} · ${transition}`;
+  }
   const font = settings.captionFont || settings.font || DEFAULT_CAPTION_FONT;
   const size = settings.captionFontSize || settings.fontSize || "50";
   const lines = settings.captionLines || "2";
-  return `${font} · ${size}px · ${lines} lines`;
+  return `Captions · ${savedAt} · ${font} · ${size}px · ${lines} lines`;
+}
+
+function formatProfileDate(rawValue) {
+  const date = new Date(rawValue);
+  if (Number.isNaN(date.getTime())) return "Saved profile";
+  return date.toLocaleString();
 }
 
 function loadSavedProfile(profileId) {
   const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
   if (!profile) return;
-  applyCaptionSettingsSnapshot(profile.settings);
+  navigateToPath(profile.route || (profile.tool === "slideshow" ? "/slideshow" : "/captions"));
+  if (profile.tool === "slideshow") {
+    applyControlValues(profile.settings);
+    updateTimingLabels();
+  } else {
+    applyCaptionSettingsSnapshot(profile.settings);
+  }
   persistWorkspaceDefaults();
-  setSavedProfilesMessage(`Loaded “${profile.name}”.`);
+  setSavedProfilesMessage(`Loaded ${profile.name}.`);
 }
 
-function deleteSavedProfile(profileId) {
-  state.account.savedProfiles = (state.account.savedProfiles || []).filter((item) => item.id !== profileId);
-  persistSavedProfiles();
-  renderSavedProfiles();
-  setSavedProfilesMessage("Preset removed.");
+async function renameSavedProfile(profileId) {
+  const user = getCurrentUser();
+  const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
+  if (!user || !profile) return;
+  const name = window.prompt("Rename settings:", profile.name || "");
+  if (name === null) return;
+  if (!name?.trim()) return;
+  try {
+    const response = await fetch("/api/account/tool-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "rename",
+        user_id: user.id,
+        profile_id: profileId,
+        name: name.trim(),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not rename profile.");
+    state.account.savedProfiles = Array.isArray(payload.profiles) ? payload.profiles : mergeToolProfiles([payload.profile]);
+    renderSavedProfiles();
+    setSavedProfilesMessage("Profile renamed.");
+  } catch (error) {
+    setSavedProfilesMessage(normalizeError(error));
+  }
+}
+
+async function deleteSavedProfile(profileId) {
+  const user = getCurrentUser();
+  const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
+  if (!user || !profile) return;
+  if (!window.confirm(`Delete ${profile.name}?`)) return;
+  try {
+    const response = await fetch("/api/account/tool-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete",
+        user_id: user.id,
+        profile_id: profileId,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not delete profile.");
+    state.account.savedProfiles = Array.isArray(payload.profiles)
+      ? payload.profiles
+      : (state.account.savedProfiles || []).filter((item) => item.id !== profileId);
+    renderSavedProfiles();
+    setSavedProfilesMessage("Profile deleted.");
+  } catch (error) {
+    setSavedProfilesMessage(normalizeError(error));
+  }
 }
 
 function readLocalJson(key, fallback) {
@@ -1936,11 +2368,6 @@ function seekVideo(video, time) {
 }
 
 async function renderCaptionedVideo() {
-  if (!isFeatureAllowed(PREMIUM_GATES.captionBurnedVideo)) {
-    setCaptionStatus("Burned-in caption video export is part of the premium plan.");
-    navigateToPath("/settings");
-    return;
-  }
   if (!state.captionVideo || state.captions.length === 0) {
     setCaptionStatus("Transcribe a video before exporting.");
     return;
@@ -1952,6 +2379,7 @@ async function renderCaptionedVideo() {
   setCaptionStatus("");
 
   try {
+    void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
     const blob = await renderCaptionedVideoWithCanvas();
     downloadBlob(blob, "video-wizard-captions.mp4");
     setCaptionProgress(100, "Captioned video exported");
@@ -4885,13 +5313,13 @@ function estimateCaptionAnalysisDuration(metadata) {
 
 function updateCaptionActionAvailability(isBusy = false) {
   const hasCaptions = state.captions.length > 0;
-  const canRenderVideo = hasCaptions && isFeatureAllowed(PREMIUM_GATES.captionBurnedVideo);
-  const canExportEdl = hasCaptions && isFeatureAllowed(PREMIUM_GATES.captionEdlPackage);
+  const canRenderVideo = hasCaptions;
+  const canExportEdl = hasCaptions;
   els.renderCaptionsButton.disabled = isBusy || !canRenderVideo;
   els.exportSrtButton.disabled = isBusy || state.captions.length === 0;
   els.exportEdlPngButton.disabled = isBusy || !canExportEdl;
-  els.renderCaptionsButton.textContent = hasPremiumAccess() ? "Video" : "Video · Premium";
-  els.exportEdlPngButton.textContent = hasPremiumAccess() ? "EDL + PNG" : "EDL + PNG · Premium";
+  els.renderCaptionsButton.textContent = "Video";
+  els.exportEdlPngButton.textContent = "EDL + PNG";
 }
 
 function setCaptionDiagnostics(message) {
@@ -4946,15 +5374,11 @@ function exportCaptionSrt() {
     .join("\n\n");
 
   downloadBlob(new Blob([`${srt}\n`], { type: "application/x-subrip" }), "video-wizard-captions.srt");
+  void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
   setCaptionStatus("SRT exported.");
 }
 
 async function exportCaptionEdlPng() {
-  if (!isFeatureAllowed(PREMIUM_GATES.captionEdlPackage)) {
-    setCaptionStatus("EDL + PNG export is part of the premium plan.");
-    navigateToPath("/settings");
-    return;
-  }
   if (!state.captions.length) {
     setCaptionStatus("Transcribe a video before exporting EDL + PNG.");
     return;
@@ -4971,6 +5395,7 @@ async function exportCaptionEdlPng() {
   const zipFiles = [];
 
   setCaptionStatus("Preparing EDL + PNG exports...");
+  void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
   for (let index = 0; index < state.captions.length; index += 1) {
     const caption = state.captions[index];
     const eventId = String(index + 1).padStart(3, "0");
@@ -5349,10 +5774,6 @@ function computeCrc32(bytes) {
 }
 
 function updateTimingLabels() {
-  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
-    els.qualityRange.value = "2";
-    setStatus("High 1080p export is part of the premium plan.");
-  }
   els.durationValue.textContent = `${Number(els.durationRange.value).toFixed(1)}s`;
   els.transitionDurationValue.textContent = `${Number(els.transitionDuration.value).toFixed(1)}s`;
   updateQualityLabel();
@@ -5363,10 +5784,6 @@ function updateTimingLabels() {
 }
 
 function handleSettingsChange() {
-  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
-    els.qualityRange.value = "2";
-    setStatus("High 1080p export is part of the premium plan.");
-  }
   updateQualityLabel();
   updateLoopControls();
   updateFileSizeEstimate();
@@ -5712,13 +6129,6 @@ async function generateSlideshow() {
     setStatus("Choose at least one photo first.");
     return;
   }
-  if (!isFeatureAllowed(PREMIUM_GATES.slideshowHighQuality) && Number(els.qualityRange.value) > 2) {
-    els.qualityRange.value = "2";
-    updateQualityLabel();
-    setStatus("High 1080p export is part of the premium plan.");
-    navigateToPath("/settings");
-    return;
-  }
   if (state.currentRender?.kind === "final") return;
 
   const stoppedPreviewRender = stopPreviewRenderNow();
@@ -5728,12 +6138,14 @@ async function generateSlideshow() {
   showRenderWindow("Rendering · estimating...");
 
   try {
+    const settingsSnapshot = getSlideshowSettingsSnapshot();
     const saveTarget = await requestSaveTarget();
     if (!saveTarget) {
       setStatus("Render canceled.");
       updateLivePreview();
       return;
     }
+    void saveAutomaticToolSettings("slideshow", settingsSnapshot);
 
     if (stoppedPreviewRender) {
       await new Promise((resolve) => window.setTimeout(resolve, 50));
