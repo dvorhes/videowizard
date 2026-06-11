@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Video Wizard</title>
-    <link rel="stylesheet" href="styles.css?v=20260607p" />
+    <link rel="stylesheet" href="styles.css?v=20260608b" />
     <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   </head>
   <body>
@@ -24,7 +24,7 @@
                 >
                   <img src="assets/video_wizard_pfp.png" alt="Video Wizard" />
                 </button>
-                <h1 id="app-title">Video Wizard</h1>
+                <h1 id="app-title" hidden></h1>
               </div>
               <nav id="homeMenu" class="brand-menu home-menu" aria-label="Video Wizard tools" hidden>
                 <a href="/" data-route="home">
@@ -49,6 +49,7 @@
             <button id="authMenuAction" class="header-action login-action-button" type="button">Log in</button>
             <button id="createAccountMenuAction" class="header-action signup-action-button" type="button" data-path="/create-account" style="display:none;">Sign up</button>
             <div class="account-menu-nav">
+              <span id="accountMenuEmailLabel" class="account-menu-email" hidden></span>
               <button
                 id="accountMenuButton"
                 class="account-menu-button"
@@ -64,7 +65,7 @@
               </button>
               <nav id="accountMenu" class="brand-menu account-menu" aria-label="Account menu" hidden>
                 <button type="button" data-account-menu-path="/settings">Settings</button>
-                <button type="button" data-account-menu-path="/account">Account</button>
+                <button type="button" data-account-menu-path="/account">Pricing</button>
                 <button type="button" data-account-menu-action="logout">Log out</button>
               </nav>
             </div>
@@ -83,13 +84,11 @@
               <article class="tool-card panel" data-path="/slideshow" role="link" tabindex="0" aria-label="Open Slideshow Generator">
                 <h3>Slideshow Generator</h3>
                 <p>Turn a batch of photos and optional music into a polished slideshow preview and export.</p>
-                <button class="tool-card-action" type="button" data-path="/slideshow">Open</button>
               </article>
 
               <article class="tool-card panel" data-path="/captions" role="link" tabindex="0" aria-label="Open Captions Utility">
                 <h3>Captions Utility</h3>
                 <p>Transcribe, refine, style, and export captioned videos without leaving the browser.</p>
-                <button class="tool-card-action" type="button" data-path="/captions">Open</button>
               </article>
 
               <article
@@ -101,13 +100,12 @@
               >
                 <h3>Adobe Premiere MOGRTs</h3>
                 <p>Easy-to-use, actually good, actually useful templates for Premiere.</p>
-                <button class="tool-card-action" type="button" data-external-url="https://videowizard.gumroad.com/">Open</button>
               </article>
             </div>
           </section>
         </div>
 
-        <div id="slideshowPage" class="page-view grid" data-page="slideshow">
+        <div id="slideshowPage" class="page-view grid" data-page="slideshow" hidden>
           <section class="panel source-panel" aria-labelledby="photos-title">
             <div class="panel-heading">
               <div>
@@ -150,13 +148,22 @@
               </summary>
 
               <div class="settings-drawer">
-                <div class="settings-toolbar">
-                  <label class="settings-load-control">
-                    <span>Load profile</span>
-                    <select id="loadSlideshowSettingsSelect">
-                      <option value="">Saved slideshow profiles</option>
-                    </select>
-                  </label>
+                <div class="settings-toolbar settings-toolbar-actions">
+                  <div class="tool-settings-actions" aria-label="Settings profile actions">
+                    <button id="openSlideshowProfilesButton" class="icon-action-button" type="button" data-tool-profile-action="load" data-tool="slideshow" data-tooltip="Load settings" aria-label="Load settings">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7.5h5l1.7 2H20v8.8A1.7 1.7 0 0 1 18.3 20H5.7A1.7 1.7 0 0 1 4 18.3z" />
+                        <path d="M4 7.5V5.7A1.7 1.7 0 0 1 5.7 4h4.6l1.4 1.8H18.3A1.7 1.7 0 0 1 20 7.5" />
+                      </svg>
+                    </button>
+                    <button id="saveSlideshowProfileButton" class="icon-action-button" type="button" data-tool-profile-action="save" data-tool="slideshow" data-tooltip="Save settings" aria-label="Save settings">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 4h11l3 3v13H5z" />
+                        <path d="M8 4v5h8V4" />
+                        <path d="M8 20v-6h8v6" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <p id="slideshowSettingsStatus" class="settings-note settings-toolbar-note" aria-live="polite"></p>
 
@@ -290,6 +297,31 @@
               </label>
             </div>
 
+            <section class="render-panel caption-export-panel" aria-labelledby="caption-export-title">
+              <div>
+                <h2 id="caption-export-title">Export</h2>
+              </div>
+
+              <div class="caption-actions">
+                <button id="renderCaptionsButton" class="secondary" type="button" disabled>Video</button>
+                <button id="exportSrtButton" class="secondary" type="button" disabled>SRT</button>
+                <button id="exportEdlPngButton" class="secondary" type="button" disabled>EDL + PNG</button>
+              </div>
+              <div id="captionProgressGroup" class="caption-progress" hidden>
+                <div class="caption-progress-header">
+                  <span id="captionProgressLabel" class="caption-progress-label">Waiting for video</span>
+                  <output id="captionProgressPercent" for="captionProgressBar">0%</output>
+                </div>
+                <progress id="captionProgressBar" value="0" max="100"></progress>
+              </div>
+
+              <p id="captionStatus" class="output-location" aria-live="polite"></p>
+              <p id="captionDiagnostics" class="caption-diagnostics" aria-live="polite"></p>
+              <div class="caption-export-footer">
+                <button id="cancelCaptionRenderButton" class="secondary small-cancel-button" type="button" hidden>Cancel</button>
+              </div>
+            </section>
+
             <div class="caption-subsection">
               <h3 class="caption-subsection-title">Captions</h3>
               <label class="caption-editor">
@@ -332,14 +364,21 @@
             <section class="render-panel">
               <div class="tool-panel-header">
                 <h2 id="caption-tools-title">Settings</h2>
-              </div>
-              <div class="settings-toolbar">
-                <label class="settings-load-control">
-                  <span>Load profile</span>
-                  <select id="loadCaptionSettingsSelect">
-                    <option value="">Saved caption profiles</option>
-                  </select>
-                </label>
+                <div class="tool-settings-actions" aria-label="Settings profile actions">
+                  <button id="openCaptionProfilesButton" class="icon-action-button" type="button" data-tool-profile-action="load" data-tool="captions" data-tooltip="Load settings" aria-label="Load settings">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 7.5h5l1.7 2H20v8.8A1.7 1.7 0 0 1 18.3 20H5.7A1.7 1.7 0 0 1 4 18.3z" />
+                      <path d="M4 7.5V5.7A1.7 1.7 0 0 1 5.7 4h4.6l1.4 1.8H18.3A1.7 1.7 0 0 1 20 7.5" />
+                    </svg>
+                  </button>
+                  <button id="saveCaptionProfileButton" class="icon-action-button" type="button" data-tool-profile-action="save" data-tool="captions" data-tooltip="Save settings" aria-label="Save settings">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 4h11l3 3v13H5z" />
+                      <path d="M8 4v5h8V4" />
+                      <path d="M8 20v-6h8v6" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <p id="captionSettingsStatus" class="settings-note settings-toolbar-note" aria-live="polite"></p>
 
@@ -349,6 +388,7 @@
                     <span>Font</span>
                     <select id="captionFont"></select>
                   </label>
+                  <input id="captionCustomFontInput" type="file" accept=".ttf,.otf,font/ttf,font/otf" hidden />
                   <label class="caption-select-control compact">
                     <span>Weight</span>
                     <select id="captionFontWeight"></select>
@@ -497,53 +537,12 @@
 
               </div>
             </section>
-
-            <section class="render-panel" aria-labelledby="caption-export-title">
-              <div>
-                <h2 id="caption-export-title">Export</h2>
-              </div>
-
-              <div class="caption-actions">
-                <button id="renderCaptionsButton" class="secondary" type="button" disabled>Video</button>
-                <button id="exportSrtButton" class="secondary" type="button" disabled>SRT</button>
-                <button id="exportEdlPngButton" class="secondary" type="button" disabled>EDL + PNG</button>
-              </div>
-              <div id="captionProgressGroup" class="caption-progress" hidden>
-                <div class="caption-progress-header">
-                  <span id="captionProgressLabel" class="caption-progress-label">Waiting for video</span>
-                  <output id="captionProgressPercent" for="captionProgressBar">0%</output>
-                </div>
-                <progress id="captionProgressBar" value="0" max="100"></progress>
-              </div>
-
-              <p id="captionStatus" class="output-location" aria-live="polite"></p>
-              <p id="captionDiagnostics" class="caption-diagnostics" aria-live="polite"></p>
-            </section>
           </aside>
         </div>
 
         <div id="settingsPage" class="page-view settings-page" data-page="settings" hidden>
           <section class="settings-grid" aria-label="Settings overview">
-            <article class="panel settings-card profiles-card">
-              <div class="settings-card-header">
-                <div>
-                  <h3>Tool profiles</h3>
-                </div>
-                <span class="settings-chip accent">Saved</span>
-              </div>
-              <p id="toolProfilesSummary" class="settings-note">Profiles save automatically when you render or export.</p>
-              <div id="savedProfilesList" class="profile-list">
-                <div class="profile-row muted">
-                  <div>
-                    <strong>None (yet)</strong>
-                    <span>Profiles will appear here.</span>
-                  </div>
-                </div>
-              </div>
-              <p id="savedProfilesMessage" class="settings-note" aria-live="polite"></p>
-            </article>
-
-            <article class="panel settings-card">
+            <article class="panel settings-card settings-card-wide">
               <div class="settings-card-header">
                 <div>
                   <h3>Account</h3>
@@ -599,37 +598,37 @@
         </div>
 
         <div id="accountPage" class="page-view account-page" data-page="account" hidden>
-          <section class="account-tier-grid" aria-label="Account tiers">
-            <article class="panel account-tier-card">
+          <section class="account-tier-grid" aria-label="Pricing">
+            <article id="freePlanCard" class="panel account-tier-card">
               <div class="account-tier-header">
                 <h2>Free</h2>
                 <span>$0</span>
               </div>
               <ul>
-                <li>Export videos up to 60 seconds</li>
-                <li>Includes Video Wizard watermark</li>
-                <li>Curated font selection</li>
-                <li>Limited render options</li>
+                <li>It's all free for the time being. Enjoy!</li>
               </ul>
             </article>
+          </section>
+        </div>
 
-            <article class="panel account-tier-card premium-tier-card">
-              <div class="account-tier-header">
-                <h2>Premium</h2>
-                <span>Annual</span>
-              </div>
-              <ul>
-                <li>Unlimited video length</li>
-                <li>No watermark</li>
-                <li>Upload your own fonts</li>
-                <li>Pro render options, including EDL and SRT</li>
-              </ul>
-            </article>
+        <div id="accessGateOverlay" class="access-gate-overlay" hidden>
+          <div id="accessGateMessage" class="access-gate-message" aria-live="polite">You must log in first.</div>
+        </div>
+
+        <div id="toolProfilesModal" class="modal-shell" hidden>
+          <div class="modal-backdrop" data-modal-close="toolProfiles"></div>
+          <section class="modal-panel panel" aria-labelledby="toolProfilesModalTitle">
+            <div class="modal-header">
+              <h3 id="toolProfilesModalTitle">Load settings</h3>
+              <button id="closeToolProfilesModalButton" class="modal-close-button" type="button" aria-label="Close load settings">Close</button>
+            </div>
+            <div id="toolProfilesModalList" class="profile-list modal-profile-list"></div>
+            <p id="toolProfilesModalMessage" class="settings-note" aria-live="polite"></p>
           </section>
         </div>
       </section>
     </main>
 
-    <script type="module" src="app.js?v=20260607p"></script>
+    <script type="module" src="app.js?v=20260608b"></script>
   </body>
 </html>

@@ -14,7 +14,13 @@ const MIN_CAPTION_DURATION_SECONDS = 0.05;
 const ONE_WORD_CAPTION_LENGTH_THRESHOLD = 6;
 const DEFAULT_CAPTION_FONT = "TikTok Sans";
 const DEFAULT_CAPTION_FONT_WEIGHT = "600";
+const CUSTOM_CAPTION_FONT_FAMILY = "Custom";
+const CUSTOM_CAPTION_FONT_WEIGHT = "400";
 const CAPTION_SPACING_REFERENCE_FONT_SIZE = 50;
+const LOCAL_ASSET_DB_NAME = "video-wizard-local-assets";
+const LOCAL_ASSET_DB_VERSION = 1;
+const LOCAL_ASSET_STORE = "assets";
+const CUSTOM_CAPTION_FONT_STORAGE_KEY = "caption-custom-font";
 const CAPTION_FONT_LIBRARY = Object.freeze({
   "TikTok Sans": {
     defaultWeight: DEFAULT_CAPTION_FONT_WEIGHT,
@@ -83,6 +89,7 @@ const els = {
   authMenuAction: document.querySelector("#authMenuAction"),
   createAccountMenuAction: document.querySelector("#createAccountMenuAction"),
   settingsMenuAction: document.querySelector("#settingsMenuAction"),
+  accountMenuEmailLabel: document.querySelector("#accountMenuEmailLabel"),
   accountMenuButton: document.querySelector("#accountMenuButton"),
   accountMenu: document.querySelector("#accountMenu"),
   homePage: document.querySelector("#homePage"),
@@ -99,6 +106,15 @@ const els = {
   accountDayPasses: document.querySelector("#accountDayPasses"),
   accountEmailEditor: document.querySelector("#accountEmailEditor"),
   accountPasswordEditor: document.querySelector("#accountPasswordEditor"),
+  billingMonthlyButton: document.querySelector("#billingMonthlyButton"),
+  billingAnnualButton: document.querySelector("#billingAnnualButton"),
+  freePlanCard: document.querySelector("#freePlanCard"),
+  premiumPlanCard: document.querySelector("#premiumPlanCard"),
+  freePlanBadge: document.querySelector("#freePlanBadge"),
+  premiumPlanBadge: document.querySelector("#premiumPlanBadge"),
+  premiumPriceLabel: document.querySelector("#premiumPriceLabel"),
+  upgradeAccountButton: document.querySelector("#upgradeAccountButton"),
+  billingMessage: document.querySelector("#billingMessage"),
   authForm: document.querySelector("#authForm"),
   authEmail: document.querySelector("#authEmail"),
   authPassword: document.querySelector("#authPassword"),
@@ -116,18 +132,23 @@ const els = {
   authMessage: document.querySelector("#authMessage"),
   saveSlideshowProfileButton: document.querySelector("#saveSlideshowProfileButton"),
   saveCaptionProfileButton: document.querySelector("#saveCaptionProfileButton"),
-  toolProfilesSummary: document.querySelector("#toolProfilesSummary"),
-  savedProfilesList: document.querySelector("#savedProfilesList"),
-  savedProfilesMessage: document.querySelector("#savedProfilesMessage"),
-  loadSlideshowSettingsSelect: document.querySelector("#loadSlideshowSettingsSelect"),
+  openSlideshowProfilesButton: document.querySelector("#openSlideshowProfilesButton"),
   slideshowSettingsStatus: document.querySelector("#slideshowSettingsStatus"),
-  loadCaptionSettingsSelect: document.querySelector("#loadCaptionSettingsSelect"),
+  openCaptionProfilesButton: document.querySelector("#openCaptionProfilesButton"),
   captionSettingsStatus: document.querySelector("#captionSettingsStatus"),
+  toolProfilesModal: document.querySelector("#toolProfilesModal"),
+  toolProfilesModalTitle: document.querySelector("#toolProfilesModalTitle"),
+  toolProfilesModalList: document.querySelector("#toolProfilesModalList"),
+  toolProfilesModalMessage: document.querySelector("#toolProfilesModalMessage"),
+  closeToolProfilesModalButton: document.querySelector("#closeToolProfilesModalButton"),
+  accessGateOverlay: document.querySelector("#accessGateOverlay"),
+  accessGateMessage: document.querySelector("#accessGateMessage"),
   captionVideoInput: document.querySelector("#captionVideoInput"),
   captionVideoName: document.querySelector("#captionVideoName"),
   captionVideoDropIcon: document.querySelector(".captions-dropzone .drop-icon"),
   captionVideoDropTitle: document.querySelector(".captions-dropzone .drop-title"),
   renderCaptionsButton: document.querySelector("#renderCaptionsButton"),
+  cancelCaptionRenderButton: document.querySelector("#cancelCaptionRenderButton"),
   exportSrtButton: document.querySelector("#exportSrtButton"),
   exportEdlPngButton: document.querySelector("#exportEdlPngButton"),
   captionProgressGroup: document.querySelector("#captionProgressGroup"),
@@ -140,6 +161,7 @@ const els = {
   captionEditor: document.querySelector("#captionEditor"),
   captionEditorSelection: document.querySelector("#captionEditorSelection"),
   captionFont: document.querySelector("#captionFont"),
+  captionCustomFontInput: document.querySelector("#captionCustomFontInput"),
   captionFontWeight: document.querySelector("#captionFontWeight"),
   captionFontSize: document.querySelector("#captionFontSize"),
   captionFontSizeValue: document.querySelector("#captionFontSizeValue"),
@@ -225,12 +247,16 @@ const PREMIUM_GATES = Object.freeze({
   captionBurnedVideo: "captionBurnedVideo",
   captionEdlPackage: "captionEdlPackage",
 });
+const PROTECTED_ROUTE_KEYS = new Set(["slideshow", "captions", "settings"]);
+const ACCESS_GATE_REDIRECT_DELAY_MS = 1100;
 const DEFAULT_APP_CONFIG = Object.freeze({
   supabaseUrl: "https://ysnyzvpkazggvxewsgzn.supabase.co",
   supabaseAnonKey: "sb_publishable_9IuEfQdN5MhqPuZm4dAP3w_Jph0e1_k",
   paddleClientToken: "",
   paddleEnvironment: "sandbox",
   paddlePriceId: "",
+  paddleMonthlyPriceId: "",
+  paddleAnnualPriceId: "",
   paddleSuccessUrl: "",
   paddleCancelUrl: "",
   billingPortalUrl: "",
@@ -286,6 +312,9 @@ const state = {
   captionPositionInitialized: false,
   captionProgressSmoothTimer: null,
   captionProgressSmooth: null,
+  captionRenderPhase: null,
+  captionRenderCancelRequested: false,
+  captionRenderInProgress: false,
   captionSelectedId: null,
   captionSelectedBoundary: null,
   captionEditorHighlightedBlockIndex: null,
@@ -304,7 +333,16 @@ const state = {
     localProfile: null,
     authReady: false,
     isStaticFallback: false,
+    billingCycle: "annual",
+    accessGateTimer: null,
+    profileModalTool: "",
+    profileNameDrafts: {
+      slideshow: "",
+      captions: "",
+    },
   },
+  customCaptionFont: null,
+  captionPendingCustomFontFallback: DEFAULT_CAPTION_FONT,
 };
 
 const transitionMap = {
@@ -400,10 +438,10 @@ const routes = {
   },
   "/account": {
     key: "account",
-    title: "Account",
+    title: "Pricing",
     page: els.accountPage,
     help: {
-      title: "Account",
+      title: "Pricing",
       steps: [],
       footer: "",
     },
@@ -441,8 +479,12 @@ window.addEventListener("resize", () => {
 els.captionVideoInput.addEventListener("change", handleCaptionVideo);
 els.captionVideoInput.addEventListener("click", guardCaptionVideoReplacement);
 els.renderCaptionsButton.addEventListener("click", renderCaptionedVideo);
+els.cancelCaptionRenderButton?.addEventListener("click", cancelCaptionRender);
 els.exportSrtButton.addEventListener("click", exportCaptionSrt);
 els.exportEdlPngButton.addEventListener("click", exportCaptionEdlPng);
+els.billingMonthlyButton?.addEventListener("click", () => setBillingCycle("monthly"));
+els.billingAnnualButton?.addEventListener("click", () => setBillingCycle("annual"));
+els.upgradeAccountButton?.addEventListener("click", handleUpgradeClick);
 els.captionEditor.addEventListener("input", handleCaptionEditorInput);
 els.captionEditor.addEventListener("click", handleCaptionCursorActivity);
 els.captionEditor.addEventListener("keyup", handleCaptionCursorActivity);
@@ -489,8 +531,8 @@ els.captionPreviewTimeline.addEventListener("keydown", handleCaptionTimelineKeyd
   input.addEventListener("change", commitCaptionSettingsSnapshot);
   input.addEventListener("blur", commitCaptionSettingsSnapshot);
 });
-els.captionFont.addEventListener("input", handleCaptionFontFamilyChange);
 els.captionFont.addEventListener("change", handleCaptionFontFamilyChange);
+els.captionCustomFontInput?.addEventListener("change", handleCaptionCustomFontSelection);
 [els.captionFont, els.captionFontWeight, els.captionFontSize, els.captionParagraphAlign, els.captionColor, els.captionStroke, els.captionStrokeEnabled, els.captionStrokeColor, els.captionDropShadow, els.captionDropShadowEnabled, els.captionDropShadowColor, els.captionTracking, els.captionLeading, els.captionPositionX, els.captionPositionY, els.captionTextBox, els.captionTextBoxColor, els.captionTextBoxOpacity, els.captionTextBoxRoundness, els.captionTextBoxPadding].forEach((input) => {
   input.addEventListener("focus", captureCaptionSettingsSnapshot);
   input.addEventListener("pointerdown", captureCaptionSettingsSnapshot);
@@ -546,7 +588,8 @@ els.qualityRange.addEventListener("input", handleSettingsChange);
 els.photoInput.addEventListener("change", handlePhotos);
 els.audioInput.addEventListener("change", handleAudio);
 els.generateButton.addEventListener("click", generateSlideshow);
-els.loadSlideshowSettingsSelect.addEventListener("change", () => void handleLoadToolSettings("slideshow"));
+els.openSlideshowProfilesButton?.addEventListener("click", () => openToolProfilesModal("slideshow"));
+els.saveSlideshowProfileButton?.addEventListener("click", handleSaveCurrentSlideshowProfile);
 els.authForm.addEventListener("submit", handleSignInSubmit);
 els.signUpButton.addEventListener("click", handleSignUpClick);
 els.signOutButton.addEventListener("click", handleSignOutClick);
@@ -556,7 +599,10 @@ els.togglePasswordEditButton.addEventListener("click", () => toggleAccountEditor
 els.cancelPasswordEditButton.addEventListener("click", () => closeAccountEditor("password"));
 els.updateEmailButton?.addEventListener("click", handleUpdateEmailClick);
 els.updatePasswordButton.addEventListener("click", handleUpdatePasswordClick);
-els.loadCaptionSettingsSelect.addEventListener("change", () => void handleLoadToolSettings("captions"));
+els.openCaptionProfilesButton?.addEventListener("click", () => openToolProfilesModal("captions"));
+els.saveCaptionProfileButton?.addEventListener("click", handleSaveCurrentCaptionProfile);
+els.closeToolProfilesModalButton?.addEventListener("click", closeToolProfilesModal);
+els.toolProfilesModal?.addEventListener("click", handleToolProfilesModalClick);
 els.trashDrop.addEventListener("dragover", handleTrashDragOver);
 els.trashDrop.addEventListener("dragleave", handleTrashDragLeave);
 els.trashDrop.addEventListener("drop", handleTrashDrop);
@@ -644,6 +690,7 @@ function handleGlobalKeydown(event) {
   if (event.key === "Escape") {
     setHomeMenuOpen(false);
     setAccountMenuOpen(false);
+    closeToolProfilesModal();
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && shouldHandleCaptionUndo(event.target)) {
     event.preventDefault();
@@ -660,6 +707,7 @@ function handleAuthAction() {
 }
 
 function navigateToPath(pathname) {
+  cancelAccessGateRedirect();
   if (pathname !== window.location.pathname) {
     history.pushState({}, "", pathname);
   }
@@ -685,18 +733,66 @@ function handleCardNavigation(element) {
   navigateToPath(element.dataset.path || "/");
 }
 
+function isAuthCheckPending() {
+  return state.account.config === null || (!state.account.authReady && !state.account.isStaticFallback);
+}
+
+function showAccessGate(message) {
+  if (els.accessGateMessage) {
+    els.accessGateMessage.textContent = message;
+  }
+  if (els.accessGateOverlay) {
+    els.accessGateOverlay.hidden = false;
+  }
+}
+
+function hideAccessGate() {
+  if (els.accessGateOverlay) {
+    els.accessGateOverlay.hidden = true;
+  }
+}
+
+function cancelAccessGateRedirect() {
+  if (state.account.accessGateTimer) {
+    window.clearTimeout(state.account.accessGateTimer);
+    state.account.accessGateTimer = null;
+  }
+  hideAccessGate();
+}
+
+function queueAccessGateRedirect() {
+  if (state.account.accessGateTimer) return;
+  showAccessGate("You must log in first.");
+  state.account.accessGateTimer = window.setTimeout(() => {
+    state.account.accessGateTimer = null;
+    hideAccessGate();
+    setAuthMessage("You must log in first.");
+    if (window.location.pathname !== "/login") {
+      history.replaceState({}, "", "/login");
+    }
+    renderRoute();
+  }, ACCESS_GATE_REDIRECT_DELAY_MS);
+}
+
 function renderRoute() {
   const pathname = window.location.pathname;
   const user = getCurrentUser();
   const requestedRoute = routes[pathname] || routes["/"];
-  const route = requestedRoute.key === "settings" && !user ? routes["/login"] : requestedRoute;
-  if (route !== requestedRoute && pathname !== "/login") {
-    history.replaceState({}, "", "/login");
+  const authCheckPending = isAuthCheckPending();
+  const requiresAuth = PROTECTED_ROUTE_KEYS.has(requestedRoute.key);
+  const isBlockedProtectedRoute = requiresAuth && !user && !authCheckPending;
+  const route = (requiresAuth && !user) ? routes["/login"] : requestedRoute;
+  if (isBlockedProtectedRoute && pathname !== "/login") {
+    queueAccessGateRedirect();
+  } else {
+    cancelAccessGateRedirect();
   }
   [els.homePage, els.loginPage, els.slideshowPage, els.captionsPage, els.settingsPage, els.accountPage].forEach((page) => {
     page.hidden = page !== route.page;
   });
-  els.appTitle.textContent = "Video Wizard";
+  const toolTitle = route.key === "slideshow" || route.key === "captions" ? route.title : "";
+  els.appTitle.textContent = toolTitle;
+  els.appTitle.hidden = !toolTitle;
   document.title = route.key === "home" ? "Video Wizard" : `Video Wizard | ${route.title}`;
   els.homeMenu
     .querySelectorAll("a[data-route]")
@@ -704,6 +800,9 @@ function renderRoute() {
       link.setAttribute("aria-current", link.dataset.route === route.key ? "page" : "false");
     });
   renderAuthPage(route.key);
+  if (route.key === "login" && requiresAuth && authCheckPending) {
+    setAuthMessage("Checking your sign-in status…");
+  }
   syncAccountMenuState();
 }
 
@@ -738,6 +837,10 @@ function syncAccountMenuState() {
     els.accountMenuButton.hidden = !user;
     els.accountMenuButton.style.display = user ? "inline-grid" : "none";
   }
+  if (els.accountMenuEmailLabel) {
+    els.accountMenuEmailLabel.hidden = !user;
+    els.accountMenuEmailLabel.textContent = user?.email || "";
+  }
   if (!user) {
     setAccountMenuOpen(false);
   }
@@ -747,6 +850,11 @@ async function initAccountSystem() {
   restoreWorkspaceDefaults();
   restoreLocalProfile();
   restoreSavedProfiles();
+  await restoreCustomCaptionFont();
+  populateCaptionFontFamilyOptions();
+  syncCaptionFontWeightOptions(els.captionFontWeight.value || DEFAULT_CAPTION_FONT_WEIGHT);
+  updateCaptionSettingsLabels();
+  ensureCaptionFontReady();
   renderSavedProfiles();
   renderAccountState();
 
@@ -758,6 +866,7 @@ async function initAccountSystem() {
   if (state.account.config.supabaseUrl && state.account.config.supabaseAnonKey) {
     await initializeSupabase();
   } else {
+    state.account.authReady = true;
     setAuthMessage("Supabase is not configured yet. Add the public project keys to enable login.");
   }
 
@@ -766,6 +875,7 @@ async function initAccountSystem() {
     await refreshAccountStatus({ force: true });
     await refreshAccountToolProfiles({ silent: true });
   }
+  renderRoute();
 }
 
 async function fetchAppConfig() {
@@ -813,14 +923,17 @@ async function initializeSupabase() {
     if (error) throw error;
     state.account.session = data.session;
     state.account.authReady = true;
+    renderRoute();
     state.account.supabase.auth.onAuthStateChange((_event, session) => {
       state.account.session = session;
       redirectAuthenticatedUserHome();
       void refreshAccountStatus({ force: true });
       void refreshAccountToolProfiles({ silent: true });
       renderAccountState();
+      renderRoute();
     });
   } catch (error) {
+    state.account.authReady = true;
     setAuthMessage(`Supabase failed to initialize. ${normalizeError(error)}`);
   }
 }
@@ -991,6 +1104,15 @@ function renderAccountState() {
     closeAccountEditor("password");
   }
   syncAccountMenuState();
+  if (els.freePlanBadge) {
+    els.freePlanBadge.hidden = premium;
+  }
+  if (els.premiumPlanBadge) {
+    els.premiumPlanBadge.hidden = !premium;
+  }
+  els.freePlanCard?.classList.toggle("is-current-plan", !premium);
+  els.premiumPlanCard?.classList.toggle("is-current-plan", premium);
+  renderBillingCycleState();
   if (state.account.isStaticFallback) {
     if (!state.account.supabase) {
       setAuthMessage("Sign-in is not available right now.");
@@ -1027,11 +1149,28 @@ function setAuthMessage(message = "") {
 }
 
 function setBillingMessage(message = "") {
-  void message;
+  if (els.billingMessage) {
+    els.billingMessage.textContent = message;
+  }
 }
 
-function setSavedProfilesMessage(message = "") {
-  els.savedProfilesMessage.textContent = message;
+function setBillingCycle(cycle) {
+  state.account.billingCycle = cycle === "annual" ? "annual" : "monthly";
+  setBillingMessage("");
+  renderBillingCycleState();
+}
+
+function renderBillingCycleState() {
+  const isAnnual = state.account.billingCycle === "annual";
+  els.billingMonthlyButton?.classList.toggle("is-active", !isAnnual);
+  els.billingAnnualButton?.classList.toggle("is-active", isAnnual);
+  els.billingMonthlyButton?.setAttribute("aria-pressed", String(!isAnnual));
+  els.billingAnnualButton?.setAttribute("aria-pressed", String(isAnnual));
+  if (els.premiumPriceLabel) {
+    els.premiumPriceLabel.innerHTML = isAnnual
+      ? '<span class="premium-price-standard">$30/month</span><span class="premium-price-live">$15/month</span><span class="premium-discount-badge">-50% off</span>'
+      : '<span class="premium-price-live">$30/month</span>';
+  }
 }
 
 function setToolSettingsStatus(tool, message = "") {
@@ -1055,17 +1194,8 @@ function applyToolSettingsSnapshot(tool, settings) {
   applyCaptionSettingsSnapshot(settings);
 }
 
-function getProfileSelectForTool(tool) {
-  return tool === "slideshow" ? els.loadSlideshowSettingsSelect : els.loadCaptionSettingsSelect;
-}
-
 function getToolProfiles(tool) {
   return (state.account.savedProfiles || []).filter((profile) => profile.tool === tool);
-}
-
-function formatSettingsProfileName(tool, date = new Date()) {
-  const label = tool === "slideshow" ? "Slideshow" : "Captions";
-  return `${label} profile - ${date.toLocaleString()}`;
 }
 
 async function fetchAccountToolSettings(tool = "") {
@@ -1085,38 +1215,12 @@ async function fetchAccountToolSettings(tool = "") {
   return payload;
 }
 
-async function handleLoadToolSettings(tool) {
-  const select = getProfileSelectForTool(tool);
-  const profileId = select.value;
-  if (!profileId) {
-    setToolSettingsStatus(tool, "");
-    return;
-  }
-  try {
-    setToolSettingsStatus(tool, "Loading profile…");
-    const profile = getToolProfiles(tool).find((item) => item.id === profileId);
-    if (!profile?.settings) {
-      setToolSettingsStatus(tool, "Profile not found.");
-      select.value = "";
-      return;
-    }
-    applyToolSettingsSnapshot(tool, profile.settings);
-    persistWorkspaceDefaults();
-    setToolSettingsStatus(tool, "Profile loaded.");
-  } catch (error) {
-    setToolSettingsStatus(tool, normalizeError(error));
-  } finally {
-    select.value = "";
-  }
-}
-
 async function refreshAccountToolProfiles({ silent = false } = {}) {
   const user = getCurrentUser();
   if (!user) {
     state.account.savedProfiles = [];
     state.account.toolProfilesLoaded = false;
     renderSavedProfiles();
-    renderToolSettingsSelects();
     return;
   }
   try {
@@ -1124,18 +1228,35 @@ async function refreshAccountToolProfiles({ silent = false } = {}) {
     state.account.savedProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
     state.account.toolProfilesLoaded = true;
     renderSavedProfiles();
-    renderToolSettingsSelects();
-    if (!silent) setSavedProfilesMessage("");
+    if (!silent && state.account.profileModalTool) {
+      els.toolProfilesModalMessage.textContent = "";
+    }
   } catch (error) {
-    if (!silent) setSavedProfilesMessage(normalizeError(error));
+    if (!silent && state.account.profileModalTool) {
+      els.toolProfilesModalMessage.textContent = normalizeError(error);
+    }
   }
 }
 
-async function saveAutomaticToolSettings(tool, settings = getToolSettingsSnapshot(tool)) {
+function hasDuplicateToolProfileName(tool, name) {
+  const normalizedName = String(name || "").trim().toLowerCase();
+  if (!normalizedName) return false;
+  return getToolProfiles(tool).some((profile) => String(profile.name || "").trim().toLowerCase() === normalizedName);
+}
+
+async function saveNamedToolSettings(tool, settings = getToolSettingsSnapshot(tool), { announce = false, name = "" } = {}) {
   const user = getCurrentUser();
   if (!user || !state.account.supabase || state.account.isStaticFallback) return null;
+  const trimmedName = String(name || "").trim();
+  if (!trimmedName) {
+    setToolSettingsStatus(tool, "Name required.");
+    return null;
+  }
+  if (hasDuplicateToolProfileName(tool, trimmedName)) {
+    setToolSettingsStatus(tool, "That settings name already exists.");
+    return null;
+  }
   try {
-    const savedAt = new Date();
     const response = await fetch("/api/account/tool-settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1144,7 +1265,7 @@ async function saveAutomaticToolSettings(tool, settings = getToolSettingsSnapsho
         user_id: user.id,
         email: user.email || "",
         tool,
-        name: formatSettingsProfileName(tool, savedAt),
+        name: trimmedName,
         settings,
       }),
     });
@@ -1154,7 +1275,12 @@ async function saveAutomaticToolSettings(tool, settings = getToolSettingsSnapsho
     }
     state.account.savedProfiles = mergeToolProfiles(payload.profiles || [payload.profile]);
     renderSavedProfiles();
-    renderToolSettingsSelects();
+    if (announce) {
+      setToolSettingsStatus(tool, "Settings saved.");
+    }
+    if (announce && state.account.profileModalTool === tool) {
+      els.toolProfilesModalMessage.textContent = "Settings saved.";
+    }
     return payload.profile || null;
   } catch (error) {
     setToolSettingsStatus(tool, normalizeError(error));
@@ -1371,13 +1497,15 @@ async function handleUpdatePasswordClick() {
 function handleUpgradeClick() {
   const config = state.account.config;
   const user = getCurrentUser();
-  if (!config?.paddlePriceId) {
-    setBillingMessage("Add `PADDLE_PRICE_ID` and `PADDLE_CLIENT_TOKEN` to enable checkout.");
+  const cycle = state.account.billingCycle === "annual" ? "annual" : "monthly";
+  const priceId = cycle === "annual" ? config?.paddleAnnualPriceId : config?.paddleMonthlyPriceId;
+  if (!priceId || !config?.paddleClientToken) {
+    setBillingMessage(`Paddle checkout needs a ${cycle} price ID before this upgrade can go live.`);
     return;
   }
   if (!user) {
     setBillingMessage("Sign in first so the purchase can be attached to a user.");
-    navigateToPath("/settings");
+    navigateToPath("/login");
     return;
   }
   if (!window.Paddle?.Checkout?.open) {
@@ -1386,15 +1514,18 @@ function handleUpgradeClick() {
   }
   setBillingMessage("");
   window.Paddle.Checkout.open({
-    items: [{ priceId: config.paddlePriceId, quantity: 1 }],
+    items: [{ priceId, quantity: 1 }],
     customer: { email: user.email || "" },
     settings: {
       displayMode: "overlay",
+      variant: "one-page",
+      allowLogout: false,
       successUrl: config.paddleSuccessUrl || window.location.href,
     },
     customData: {
       supabase_user_id: user.id,
       supabase_email: user.email || "",
+      billing_cycle: cycle,
     },
   });
 }
@@ -1531,11 +1662,31 @@ function saveToolProfile(profile) {
 }
 
 function handleSaveCurrentSlideshowProfile() {
-  void saveAutomaticToolSettings("slideshow", getSlideshowSettingsSnapshot());
+  if (!getCurrentUser()) {
+    setToolSettingsStatus("slideshow", "Sign in to save settings.");
+    return;
+  }
+  const name = window.prompt("Name these settings:", state.account.profileNameDrafts.slideshow || "");
+  if (name === null) return;
+  state.account.profileNameDrafts.slideshow = String(name || "").trim();
+  void saveNamedToolSettings("slideshow", getSlideshowSettingsSnapshot(), {
+    announce: true,
+    name: state.account.profileNameDrafts.slideshow,
+  });
 }
 
 function handleSaveCurrentCaptionProfile() {
-  void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
+  if (!getCurrentUser()) {
+    setToolSettingsStatus("captions", "Sign in to save settings.");
+    return;
+  }
+  const name = window.prompt("Name these settings:", state.account.profileNameDrafts.captions || "");
+  if (name === null) return;
+  state.account.profileNameDrafts.captions = String(name || "").trim();
+  void saveNamedToolSettings("captions", getCaptionSettingsSnapshot(), {
+    announce: true,
+    name: state.account.profileNameDrafts.captions,
+  });
 }
 
 function mergeToolProfiles(incomingProfiles = []) {
@@ -1547,85 +1698,11 @@ function mergeToolProfiles(incomingProfiles = []) {
   return Array.from(merged.values()).sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
 }
 
-function renderToolSettingsSelects() {
-  [
-    ["slideshow", els.loadSlideshowSettingsSelect, "Saved slideshow profiles"],
-    ["captions", els.loadCaptionSettingsSelect, "Saved caption profiles"],
-  ].forEach(([tool, select, placeholder]) => {
-    if (!select) return;
-    const profiles = getToolProfiles(tool);
-    const user = getCurrentUser();
-    const toolbar = select.closest(".settings-toolbar");
-    const shouldShow = Boolean(user && profiles.length);
-    if (toolbar) {
-      toolbar.hidden = !shouldShow;
-    }
-    select.innerHTML = `
-      <option value="">${escapeHtml(placeholder)}</option>
-      ${profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join("")}
-    `;
-    select.disabled = !shouldShow;
-  });
-}
-
 function renderSavedProfiles() {
-  const profiles = state.account.savedProfiles || [];
-  renderToolSettingsSelects();
-  if (!getCurrentUser()) {
-    els.toolProfilesSummary.textContent = "Log in to review saved profiles.";
-    els.savedProfilesList.innerHTML = `
-      <div class="profile-row muted">
-        <div>
-          <strong>No account loaded</strong>
-          <span>Profiles appear after login.</span>
-        </div>
-      </div>
-    `;
-    return;
+  renderToolProfileButtons();
+  if (state.account.profileModalTool) {
+    renderToolProfilesModal(state.account.profileModalTool);
   }
-  if (!profiles.length) {
-    els.toolProfilesSummary.textContent = "Profiles save automatically when you render or export.";
-    els.savedProfilesList.innerHTML = `
-      <div class="profile-row muted">
-        <div>
-          <strong>None (yet)</strong>
-          <span>Render or export from a tool to create one.</span>
-        </div>
-      </div>
-    `;
-    return;
-  }
-  els.toolProfilesSummary.textContent = `${profiles.length} saved profile${profiles.length === 1 ? "" : "s"}`;
-  els.savedProfilesList.innerHTML = profiles.map((profile) => `
-    <div class="profile-row">
-      <div>
-        <strong>${escapeHtml(profile.name)}</strong>
-        <span>${formatSavedProfileSummary(profile)}</span>
-      </div>
-      <div class="profile-row-actions">
-        <button class="ghost-action" type="button" data-profile-action="rename" data-profile-id="${profile.id}">Rename</button>
-        <button class="ghost-action" type="button" data-profile-action="load" data-profile-id="${profile.id}">Load</button>
-        <button class="ghost-action" type="button" data-profile-action="delete" data-profile-id="${profile.id}">Delete</button>
-      </div>
-    </div>
-  `).join("");
-  els.savedProfilesList.querySelectorAll("[data-profile-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const action = button.dataset.profileAction;
-      const profileId = button.dataset.profileId;
-      if (action === "load") {
-        loadSavedProfile(profileId);
-        return;
-      }
-      if (action === "rename") {
-        void renameSavedProfile(profileId);
-        return;
-      }
-      if (action === "delete") {
-        void deleteSavedProfile(profileId);
-      }
-    });
-  });
 }
 
 function formatSavedProfileSummary(profile) {
@@ -1649,72 +1726,95 @@ function formatProfileDate(rawValue) {
   return date.toLocaleString();
 }
 
-function loadSavedProfile(profileId) {
-  const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
+function applySavedProfile(profile) {
   if (!profile) return;
-  navigateToPath(profile.route || (profile.tool === "slideshow" ? "/slideshow" : "/captions"));
-  if (profile.tool === "slideshow") {
-    applyControlValues(profile.settings);
-    updateTimingLabels();
-  } else {
-    applyCaptionSettingsSnapshot(profile.settings);
-  }
+  applyToolSettingsSnapshot(profile.tool, profile.settings);
   persistWorkspaceDefaults();
-  setSavedProfilesMessage(`Loaded ${profile.name}.`);
 }
 
-async function renameSavedProfile(profileId) {
+function renderToolProfileButtons() {
+  document.querySelectorAll("[data-tool-profile-action]").forEach((button) => {
+    button.disabled = false;
+  });
+}
+
+function openToolProfilesModal(tool) {
+  state.account.profileModalTool = tool;
+  renderToolProfilesModal(tool);
+  els.toolProfilesModal.hidden = false;
+}
+
+function closeToolProfilesModal() {
+  state.account.profileModalTool = "";
+  els.toolProfilesModal.hidden = true;
+  els.toolProfilesModalMessage.textContent = "";
+}
+
+function renderToolProfilesModal(tool) {
   const user = getCurrentUser();
-  const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
-  if (!user || !profile) return;
-  const name = window.prompt("Rename settings:", profile.name || "");
-  if (name === null) return;
-  if (!name?.trim()) return;
-  try {
-    const response = await fetch("/api/account/tool-settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "rename",
-        user_id: user.id,
-        profile_id: profileId,
-        name: name.trim(),
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not rename profile.");
-    state.account.savedProfiles = Array.isArray(payload.profiles) ? payload.profiles : mergeToolProfiles([payload.profile]);
-    renderSavedProfiles();
-    setSavedProfilesMessage("Profile renamed.");
-  } catch (error) {
-    setSavedProfilesMessage(normalizeError(error));
+  const profiles = getToolProfiles(tool);
+  const label = tool === "slideshow" ? "Slideshow" : "Captions";
+  els.toolProfilesModalTitle.textContent = `Load ${label} settings`;
+  if (!user) {
+    els.toolProfilesModalList.innerHTML = `
+      <div class="profile-row muted">
+        <div>
+          <strong>Sign in required</strong>
+          <span>Settings are saved to your account.</span>
+        </div>
+      </div>
+    `;
+    els.toolProfilesModalMessage.textContent = "";
+    return;
   }
+  if (!profiles.length) {
+    els.toolProfilesModalList.innerHTML = `
+      <div class="profile-row muted">
+        <div>
+          <strong>None (yet)</strong>
+          <span>Save settings from this tool to create one.</span>
+        </div>
+      </div>
+    `;
+    els.toolProfilesModalMessage.textContent = "";
+    return;
+  }
+  els.toolProfilesModalList.innerHTML = profiles.map((profile) => `
+    <div class="profile-row">
+      <div>
+        <strong>${escapeHtml(profile.name)}</strong>
+        <span>${formatSavedProfileSummary(profile)}</span>
+      </div>
+      <div class="profile-row-actions">
+        <button class="ghost-action" type="button" data-profile-action="load" data-profile-id="${profile.id}" data-profile-tool="${tool}">Load</button>
+      </div>
+    </div>
+  `).join("");
+  els.toolProfilesModalMessage.textContent = "";
 }
 
-async function deleteSavedProfile(profileId) {
-  const user = getCurrentUser();
-  const profile = (state.account.savedProfiles || []).find((item) => item.id === profileId);
-  if (!user || !profile) return;
-  if (!window.confirm(`Delete ${profile.name}?`)) return;
-  try {
-    const response = await fetch("/api/account/tool-settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "delete",
-        user_id: user.id,
-        profile_id: profileId,
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not delete profile.");
-    state.account.savedProfiles = Array.isArray(payload.profiles)
-      ? payload.profiles
-      : (state.account.savedProfiles || []).filter((item) => item.id !== profileId);
-    renderSavedProfiles();
-    setSavedProfilesMessage("Profile deleted.");
-  } catch (error) {
-    setSavedProfilesMessage(normalizeError(error));
+function handleToolProfilesModalClick(event) {
+  const closeTarget = event.target.closest("[data-modal-close='toolProfiles']");
+  if (closeTarget) {
+    closeToolProfilesModal();
+    return;
+  }
+  const actionButton = event.target.closest("[data-profile-action]");
+  if (!actionButton) return;
+  const action = actionButton.dataset.profileAction;
+  const profileId = actionButton.dataset.profileId || "";
+  const tool = actionButton.dataset.profileTool || state.account.profileModalTool || "";
+  if (!profileId) return;
+  if (action === "load") {
+    const profile = getToolProfiles(tool).find((item) => item.id === profileId);
+    if (!profile) {
+      els.toolProfilesModalMessage.textContent = "Profile not found.";
+      return;
+    }
+    applySavedProfile(profile);
+    setToolSettingsStatus(tool, "Settings loaded.");
+    closeToolProfilesModal();
+    return;
   }
 }
 
@@ -1732,6 +1832,66 @@ function writeLocalJson(key, value) {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (_error) {
     // Ignore storage failures so the editor still works in private or restricted contexts.
+  }
+}
+
+function openLocalAssetDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error("This browser cannot store local font files."));
+      return;
+    }
+    const request = window.indexedDB.open(LOCAL_ASSET_DB_NAME, LOCAL_ASSET_DB_VERSION);
+    request.addEventListener("upgradeneeded", () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(LOCAL_ASSET_STORE)) {
+        database.createObjectStore(LOCAL_ASSET_STORE, { keyPath: "key" });
+      }
+    });
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error || new Error("Could not open local asset storage.")));
+  });
+}
+
+async function readLocalAsset(key) {
+  const database = await openLocalAssetDb();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(LOCAL_ASSET_STORE, "readonly");
+    const store = transaction.objectStore(LOCAL_ASSET_STORE);
+    const request = store.get(key);
+    request.addEventListener("success", () => resolve(request.result || null));
+    request.addEventListener("error", () => reject(request.error || new Error("Could not read local asset.")));
+  });
+}
+
+async function writeLocalAsset(key, value) {
+  const database = await openLocalAssetDb();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(LOCAL_ASSET_STORE, "readwrite");
+    const store = transaction.objectStore(LOCAL_ASSET_STORE);
+    const request = store.put({ key, ...value });
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error || new Error("Could not save local asset.")));
+  });
+}
+
+async function restoreCustomCaptionFont() {
+  try {
+    const record = await readLocalAsset(CUSTOM_CAPTION_FONT_STORAGE_KEY);
+    if (!record?.buffer) {
+      state.customCaptionFont = null;
+      return;
+    }
+    state.customCaptionFont = {
+      name: record.name || "Custom font",
+      type: record.type || "font/ttf",
+      buffer: record.buffer,
+      updatedAt: record.updatedAt || "",
+    };
+    await ensureCaptionFontReady(CUSTOM_CAPTION_FONT_FAMILY, CUSTOM_CAPTION_FONT_WEIGHT);
+  } catch (error) {
+    console.warn("Could not restore the custom caption font from local storage.", error);
+    state.customCaptionFont = null;
   }
 }
 
@@ -2372,30 +2532,62 @@ async function renderCaptionedVideo() {
     setCaptionStatus("Transcribe a video before exporting.");
     return;
   }
+  if (state.captionRenderInProgress) return;
 
   remapEditorToTimedCaptions();
+  state.captionRenderCancelRequested = false;
+  state.captionRenderInProgress = true;
   setCaptionBusy(true);
   setCaptionProgress(0, "Rendering captioned video");
   setCaptionStatus("");
 
   try {
-    void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
     const blob = await renderCaptionedVideoWithCanvas();
+    throwIfCaptionRenderCanceled();
     downloadBlob(blob, "video-wizard-captions.mp4");
     setCaptionProgress(100, "Captioned video exported");
     setCaptionStatus("Captioned video exported.");
+    await new Promise((resolve) => window.setTimeout(resolve, 420));
+    resetCaptionProgress();
   } catch (error) {
-    setCaptionStatus(normalizeError(error));
+    if (isCaptionRenderCanceled(error)) {
+      resetCaptionProgress();
+      setCaptionStatus("Render canceled.");
+    } else {
+      setCaptionStatus(normalizeError(error));
+    }
   } finally {
+    state.captionRenderInProgress = false;
+    state.captionRenderCancelRequested = false;
     setCaptionBusy(false);
   }
 }
 
+function cancelCaptionRender() {
+  if (!state.captionRenderInProgress) return;
+  state.captionRenderCancelRequested = true;
+  setCaptionStatus("Canceling render...");
+  stopCaptionProgressSmoothing();
+  if (state.loaded) {
+    ffmpeg.terminate();
+    state.loaded = false;
+  }
+}
+
+function throwIfCaptionRenderCanceled() {
+  if (!state.captionRenderCancelRequested) return;
+  throw new DOMException("Caption render canceled.", "AbortError");
+}
+
+function isCaptionRenderCanceled(error) {
+  return state.captionRenderCancelRequested || error?.name === "AbortError" || /canceled|cancelled|terminated/i.test(String(error?.message || error || ""));
+}
+
 async function renderCaptionedVideoWithCanvas() {
   const FRAME_PHASE_END = 82;
-  const ENCODE_PHASE_END = 91;
-  const MUX_PHASE_END = 97;
-  const FINALIZE_PHASE_END = 99;
+  const ENCODE_PHASE_END = 94;
+  const MUX_PHASE_END = 99;
+  const FINALIZE_PHASE_END = 100;
   const sourceVideo = document.createElement("video");
   sourceVideo.src = state.captionVideoUrl;
   sourceVideo.muted = true;
@@ -2427,6 +2619,7 @@ async function renderCaptionedVideoWithCanvas() {
   await ffmpeg.writeFile(sourceName, await fetchFile(state.captionVideo));
 
   for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
+    throwIfCaptionRenderCanceled();
     const time = Math.min(duration, frameIndex / fps);
     await seekVideo(sourceVideo, time);
     ctx.fillStyle = "#000";
@@ -2447,7 +2640,8 @@ async function renderCaptionedVideoWithCanvas() {
     }
   }
 
-  setCaptionProgress(ENCODE_PHASE_END - 4, "Encoding caption video");
+  throwIfCaptionRenderCanceled();
+  beginCaptionRenderPhase(FRAME_PHASE_END, ENCODE_PHASE_END, "Encoding caption video");
   await ffmpeg.exec([
     "-framerate",
     String(fps),
@@ -2470,8 +2664,10 @@ async function renderCaptionedVideoWithCanvas() {
     "+faststart",
     visualName,
   ]);
+  endCaptionRenderPhase(ENCODE_PHASE_END);
 
-  setCaptionProgress(MUX_PHASE_END - 2, "Adding original audio");
+  throwIfCaptionRenderCanceled();
+  beginCaptionRenderPhase(ENCODE_PHASE_END, MUX_PHASE_END, "Adding original audio");
   await ffmpeg.exec([
     "-i",
     visualName,
@@ -2492,10 +2688,14 @@ async function renderCaptionedVideoWithCanvas() {
     "+faststart",
     outputName,
   ]);
+  endCaptionRenderPhase(MUX_PHASE_END);
 
+  throwIfCaptionRenderCanceled();
   setCaptionProgress(FINALIZE_PHASE_END, "Finalizing export file");
   const data = await ffmpeg.readFile(outputName);
-  return new Blob([data], { type: "video/mp4" });
+  const blob = new Blob([data], { type: "video/mp4" });
+  await cleanWorkspace().catch(() => undefined);
+  return blob;
 }
 
 function drawCaptionOnCanvas(ctx, caption, width, height) {
@@ -2565,6 +2765,12 @@ function measureCaptionFontMetrics(ctx, fontSize) {
 
 function getCaptionFontConfig(fontFamily) {
   const family = normalizeCaptionFontFamily(fontFamily);
+  if (family === CUSTOM_CAPTION_FONT_FAMILY && state.customCaptionFont) {
+    return {
+      defaultWeight: CUSTOM_CAPTION_FONT_WEIGHT,
+      weights: [{ value: CUSTOM_CAPTION_FONT_WEIGHT, label: "Regular" }],
+    };
+  }
   return CAPTION_FONT_LIBRARY[family] || CAPTION_FONT_LIBRARY[DEFAULT_CAPTION_FONT];
 }
 
@@ -2583,7 +2789,7 @@ function getCaptionFontOption(fontFamily, fontWeight) {
   const weight = normalizeCaptionFontWeight(family, fontWeight);
   return {
     family,
-    ...getCaptionFontWeightOptions(family).find((option) => option.value === weight),
+    ...(getCaptionFontWeightOptions(family).find((option) => option.value === weight) || { value: weight, label: "Regular" }),
   };
 }
 
@@ -2593,7 +2799,7 @@ function getCaptionFontCacheKey(fontFamily, fontWeight) {
 }
 
 function getCaptionCanvasFont(fontSize, settings = getCaptionSettings()) {
-  const option = getCaptionFontOption(settings.font, settings.fontWeight);
+  const option = getCaptionFontOption(settings.captionFont || settings.font, settings.captionFontWeight || settings.fontWeight);
   return `${option.value} ${fontSize}px ${quoteFontFamily(option.family)}, sans-serif`;
 }
 
@@ -2940,7 +3146,61 @@ function handleCaptionStyleChange() {
 }
 
 function handleCaptionFontFamilyChange() {
-  syncCaptionFontWeightOptions(els.captionFontWeight.value);
+  const family = els.captionFont.value;
+  if (family !== CUSTOM_CAPTION_FONT_FAMILY) {
+    els.captionFont.dataset.lastNonCustomFont = family;
+    syncCaptionFontWeightOptions(els.captionFontWeight.value);
+    void ensureCaptionFontReady(family, els.captionFontWeight.value);
+    return;
+  }
+  if (state.customCaptionFont) {
+    syncCaptionFontWeightOptions(CUSTOM_CAPTION_FONT_WEIGHT);
+    void ensureCaptionFontReady(CUSTOM_CAPTION_FONT_FAMILY, CUSTOM_CAPTION_FONT_WEIGHT);
+    return;
+  }
+  state.captionPendingCustomFontFallback = els.captionFont.dataset.lastNonCustomFont || DEFAULT_CAPTION_FONT;
+  els.captionCustomFontInput.value = "";
+  els.captionCustomFontInput.click();
+}
+
+async function handleCaptionCustomFontSelection(event) {
+  const [file] = Array.from(event.target.files || []);
+  if (!file) {
+    els.captionFont.value = state.captionPendingCustomFontFallback || DEFAULT_CAPTION_FONT;
+    syncCaptionFontWeightOptions(els.captionFontWeight.value);
+    return;
+  }
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  if (!["ttf", "otf"].includes(extension)) {
+    els.captionFont.value = state.captionPendingCustomFontFallback || DEFAULT_CAPTION_FONT;
+    syncCaptionFontWeightOptions(els.captionFontWeight.value);
+    setToolSettingsStatus("captions", "Choose a valid .ttf or .otf font file.");
+    return;
+  }
+  try {
+    const buffer = await file.arrayBuffer();
+    state.customCaptionFont = {
+      name: file.name,
+      type: file.type || `font/${extension}`,
+      buffer,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeLocalAsset(CUSTOM_CAPTION_FONT_STORAGE_KEY, state.customCaptionFont);
+    state.captionLoadedFonts.delete(getCaptionFontCacheKey(CUSTOM_CAPTION_FONT_FAMILY, CUSTOM_CAPTION_FONT_WEIGHT));
+    state.captionFontReadyPromises.delete(getCaptionFontCacheKey(CUSTOM_CAPTION_FONT_FAMILY, CUSTOM_CAPTION_FONT_WEIGHT));
+    populateCaptionFontFamilyOptions();
+    els.captionFont.value = CUSTOM_CAPTION_FONT_FAMILY;
+    syncCaptionFontWeightOptions(CUSTOM_CAPTION_FONT_WEIGHT);
+    await ensureCaptionFontReady(CUSTOM_CAPTION_FONT_FAMILY, CUSTOM_CAPTION_FONT_WEIGHT);
+    persistWorkspaceDefaults();
+    updateCaptionOverlay();
+    setToolSettingsStatus("captions", `Custom font loaded: ${file.name}`);
+  } catch (error) {
+    console.warn("Could not load the custom caption font.", error);
+    els.captionFont.value = state.captionPendingCustomFontFallback || DEFAULT_CAPTION_FONT;
+    syncCaptionFontWeightOptions(els.captionFontWeight.value);
+    setToolSettingsStatus("captions", "Could not load that font file.");
+  }
 }
 
 function getCaptionSettingsSnapshot() {
@@ -2995,6 +3255,7 @@ function pushCaptionUndoEntry(entry) {
 function applyCaptionSettingsSnapshot(snapshot) {
   if (!snapshot) return;
   const previousSnapshot = getCaptionSettingsSnapshot();
+  const requestedCustomFont = snapshot.captionFont === CUSTOM_CAPTION_FONT_FAMILY;
   state.isRestoringCaptionSettings = true;
   Object.entries(snapshot).forEach(([key, value]) => {
     const input = els[key];
@@ -3006,6 +3267,9 @@ function applyCaptionSettingsSnapshot(snapshot) {
     }
   });
   syncCaptionFontWeightOptions(snapshot.captionFontWeight);
+  if (requestedCustomFont && !state.customCaptionFont) {
+    setToolSettingsStatus("captions", "Custom font is only available on the browser where it was added.");
+  }
   setCaptionTextBoxMode(els.captionTextBox.value);
   setCaptionParagraphAlign(els.captionParagraphAlign.value || "center");
   updateCaptionSettingsLabels();
@@ -3242,7 +3506,8 @@ function updateCaptionOverlay() {
 }
 
 function populateCaptionFontFamilyOptions() {
-  els.captionFont.innerHTML = Object.keys(CAPTION_FONT_LIBRARY)
+  const families = [...Object.keys(CAPTION_FONT_LIBRARY), CUSTOM_CAPTION_FONT_FAMILY];
+  els.captionFont.innerHTML = families
     .map((family) => `<option value="${family}">${family}</option>`)
     .join("");
   els.captionFont.value = normalizeCaptionFontFamily(els.captionFont.value);
@@ -3286,7 +3551,10 @@ async function loadCaptionFont(fontFamily = DEFAULT_CAPTION_FONT, fontWeight = D
   const option = getCaptionFontOption(fontFamily, fontWeight);
   const fontSpec = `${option.value} 72px ${quoteFontFamily(option.family)}`;
   try {
-    const fontFace = new FontFace(option.family, `url("${option.file}")`, {
+    const source = option.family === CUSTOM_CAPTION_FONT_FAMILY && state.customCaptionFont?.buffer
+      ? state.customCaptionFont.buffer
+      : `url("${option.file}")`;
+    const fontFace = new FontFace(option.family, source, {
       weight: option.value,
       style: "normal",
     });
@@ -3307,6 +3575,9 @@ async function loadCaptionFont(fontFamily = DEFAULT_CAPTION_FONT, fontWeight = D
 function normalizeCaptionFontFamily(fontFamily) {
   const family = String(fontFamily || DEFAULT_CAPTION_FONT).trim();
   if (family === "TikTok Sans Semibold") return DEFAULT_CAPTION_FONT;
+  if (family === CUSTOM_CAPTION_FONT_FAMILY) {
+    return state.customCaptionFont ? CUSTOM_CAPTION_FONT_FAMILY : DEFAULT_CAPTION_FONT;
+  }
   return CAPTION_FONT_FAMILIES.has(family) ? family : DEFAULT_CAPTION_FONT;
 }
 
@@ -5226,6 +5497,35 @@ function syncCaptionPositionControls() {
 
 function setCaptionBusy(isBusy) {
   updateCaptionActionAvailability(isBusy);
+  if (els.cancelCaptionRenderButton) {
+    els.cancelCaptionRenderButton.hidden = !state.captionRenderInProgress;
+    els.cancelCaptionRenderButton.disabled = !state.captionRenderInProgress;
+  }
+}
+
+function beginCaptionRenderPhase(startPercent, endPercent, label) {
+  state.captionRenderPhase = {
+    startPercent,
+    endPercent,
+    label,
+  };
+  setCaptionProgress(startPercent, label);
+}
+
+function updateCaptionRenderPhaseProgress(progress) {
+  const phase = state.captionRenderPhase;
+  if (!phase) return;
+  const safeProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+  const percent = phase.startPercent + (phase.endPercent - phase.startPercent) * safeProgress;
+  setCaptionProgress(percent, phase.label);
+}
+
+function endCaptionRenderPhase(forcePercent = null) {
+  if (forcePercent !== null && Number.isFinite(Number(forcePercent))) {
+    const label = state.captionRenderPhase?.label || "";
+    setCaptionProgress(Number(forcePercent), label);
+  }
+  state.captionRenderPhase = null;
 }
 
 function setCaptionStatus(message) {
@@ -5251,6 +5551,7 @@ function setCaptionProgress(percent, label, { visible = true } = {}) {
 
 function resetCaptionProgress() {
   stopCaptionProgressSmoothing();
+  endCaptionRenderPhase();
   els.captionProgressGroup.hidden = true;
   els.captionProgressBar.value = 0;
   els.captionProgressPercent.textContent = "0%";
@@ -5374,7 +5675,6 @@ function exportCaptionSrt() {
     .join("\n\n");
 
   downloadBlob(new Blob([`${srt}\n`], { type: "application/x-subrip" }), "video-wizard-captions.srt");
-  void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
   setCaptionStatus("SRT exported.");
 }
 
@@ -5395,7 +5695,6 @@ async function exportCaptionEdlPng() {
   const zipFiles = [];
 
   setCaptionStatus("Preparing EDL + PNG exports...");
-  void saveAutomaticToolSettings("captions", getCaptionSettingsSnapshot());
   for (let index = 0; index < state.captions.length; index += 1) {
     const caption = state.captions[index];
     const eventId = String(index + 1).padStart(3, "0");
@@ -6092,6 +6391,10 @@ async function loadFFmpeg() {
   });
 
   ffmpeg.on("progress", ({ progress }) => {
+    if (state.captionRenderInProgress && state.captionRenderPhase && Number.isFinite(progress)) {
+      updateCaptionRenderPhaseProgress(progress);
+      return;
+    }
     if (Number.isFinite(progress) && !state.currentRender) {
       els.progressBar.value = Math.max(0, Math.min(1, progress));
     }
@@ -6145,8 +6448,6 @@ async function generateSlideshow() {
       updateLivePreview();
       return;
     }
-    void saveAutomaticToolSettings("slideshow", settingsSnapshot);
-
     if (stoppedPreviewRender) {
       await new Promise((resolve) => window.setTimeout(resolve, 50));
     }
@@ -6888,7 +7189,7 @@ async function publishOutput(blob, saveTarget) {
 }
 
 function getOutputName() {
-  return "video-wizard-slideshow.mp4";
+  return "slideshow.mp4";
 }
 
 async function requestSaveTarget() {

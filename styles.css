@@ -98,7 +98,20 @@ input {
 
 .account-menu-nav {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex: 0 0 auto;
+}
+
+.account-menu-email {
+  max-width: 220px;
+  overflow: hidden;
+  color: rgba(240, 236, 230, 0.72);
+  font-size: 0.88rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-menu-button {
@@ -146,6 +159,10 @@ input {
   align-items: center;
   gap: 14px;
   flex: 0 0 auto;
+}
+
+.brand-mark h1[hidden] {
+  display: none;
 }
 
 .brand-menu {
@@ -664,7 +681,7 @@ h2 {
 
 .tool-card {
   display: grid;
-  grid-template-rows: minmax(72px, auto) 1fr auto;
+  grid-template-rows: minmax(72px, auto) 1fr;
   gap: 18px;
   min-height: 260px;
   justify-items: center;
@@ -673,6 +690,21 @@ h2 {
   background:
     radial-gradient(circle at top right, rgba(51, 95, 255, 0.12), transparent 13rem),
     rgba(24, 18, 42, 0.82);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.tool-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(116, 216, 255, 0.34);
+  background:
+    radial-gradient(circle at top right, rgba(116, 216, 255, 0.18), transparent 13rem),
+    radial-gradient(circle at top left, rgba(255, 95, 173, 0.12), transparent 16rem),
+    rgba(29, 21, 50, 0.9);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.22);
 }
 
 .tool-card:focus,
@@ -712,7 +744,6 @@ h2 {
   line-height: 1.7;
 }
 
-.tool-card-action,
 .ghost-action {
   min-height: 38px;
   width: fit-content;
@@ -728,7 +759,6 @@ h2 {
     background 0.16s ease;
 }
 
-.tool-card-action:hover,
 .ghost-action:hover {
   transform: translateY(-1px);
   border-color: rgba(116, 216, 255, 0.48);
@@ -773,18 +803,103 @@ h2 {
   margin: 0 auto;
 }
 
+.settings-card-wide {
+  grid-column: 1 / -1;
+}
+
 .account-tier-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
+.account-current-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+
+.account-current-card span {
+  color: var(--muted);
+}
+
+.account-current-card strong {
+  color: var(--gold);
+}
+
+.billing-toggle {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(7, 6, 14, 0.28);
+}
+
+.billing-toggle-button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.billing-toggle-button.is-active {
+  color: #24183e;
+  background: rgba(226, 240, 255, 0.92);
+}
+
 .account-tier-card {
+  position: relative;
   display: grid;
   align-content: start;
   gap: 20px;
   min-height: 330px;
   padding: 28px;
+}
+
+.account-tier-card.is-current-plan {
+  border-color: rgba(226, 240, 255, 0.52);
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 240, 255, 0.18),
+    0 18px 80px rgba(28, 32, 96, 0.18);
+}
+
+.plan-current-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: #201538;
+  background: rgba(226, 240, 255, 0.96);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.upgrade-account-button {
+  min-height: 44px;
+  margin-top: 4px;
+  border: 1px solid rgba(100, 242, 210, 0.4);
+  border-radius: 999px;
+  color: #0e1523;
+  background: var(--green);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 14px 36px rgba(100, 242, 210, 0.16);
+}
+
+.upgrade-account-button:hover {
+  transform: translateY(-1px);
 }
 
 .premium-tier-card {
@@ -809,6 +924,38 @@ h2 {
 .account-tier-header span {
   color: var(--muted);
   font-weight: 650;
+}
+
+.premium-price-stack {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.premium-price-standard {
+  color: rgba(240, 236, 230, 0.46);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.premium-price-live {
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.premium-discount-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #0d1e17;
+  background: rgba(100, 242, 210, 0.94);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .account-tier-card ul {
@@ -1299,6 +1446,34 @@ h2 {
   pointer-events: none;
 }
 
+.access-gate-overlay[hidden] {
+  display: none;
+}
+
+.access-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(7, 6, 14, 0.52);
+  backdrop-filter: blur(6px);
+}
+
+.access-gate-message {
+  width: min(100%, 360px);
+  padding: 16px 18px;
+  border: 1px solid rgba(116, 216, 255, 0.32);
+  border-radius: 14px;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top right, rgba(116, 216, 255, 0.12), transparent 12rem),
+    rgba(24, 18, 42, 0.94);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
 .caption-preview-controls {
   display: grid;
   gap: 2px;
@@ -1519,6 +1694,29 @@ h2 {
   gap: 6px;
 }
 
+.caption-export-panel {
+  padding: 16px;
+}
+
+.caption-export-footer {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 30px;
+  margin-top: 6px;
+}
+
+.small-cancel-button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.small-cancel-button[hidden] {
+  display: none;
+}
+
 .caption-subsection-title {
   margin: 0;
   color: var(--gold);
@@ -1537,6 +1735,63 @@ h2 {
 
 .caption-progress[hidden] {
   display: none;
+}
+
+.modal-shell[hidden] {
+  display: none;
+}
+
+.modal-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 2, 8, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 720px);
+  max-height: min(78vh, 720px);
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.modal-close-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  font: inherit;
+  cursor: pointer;
+}
+
+.modal-profile-list {
+  display: grid;
+  gap: 10px;
 }
 
 .caption-progress-header {
@@ -2316,6 +2571,10 @@ h2 {
   margin-bottom: -8px;
 }
 
+.settings-toolbar-actions {
+  justify-content: flex-end;
+}
+
 .settings-toolbar[hidden] {
   display: none;
 }
@@ -2345,6 +2604,66 @@ h2 {
 
 .settings-toolbar-note {
   margin-top: -6px;
+}
+
+.tool-settings-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.icon-action-button {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(240, 236, 230, 0.78);
+  cursor: pointer;
+}
+
+.icon-action-button svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-action-button:hover,
+.icon-action-button:focus-visible {
+  color: rgba(255, 255, 255, 0.98);
+  outline: none;
+}
+
+.icon-action-button::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(10, 7, 18, 0.96);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+  font-size: 0.78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.icon-action-button:hover::after,
+.icon-action-button:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .settings-section {
